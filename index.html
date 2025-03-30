@@ -1,187 +1,855 @@
-
 <!DOCTYPE html>
-<html lang="en">
+
+<html lang="en"> <!-- Changed lang to 'en' as most code/comments are English -->
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>FPS Game - Vibe Jam</title>
-    <style>
-        /* --- CSS Styles (Mostly Unchanged - Keep your existing styles) --- */
-        :root {
-            --primary-color: #4CAF50; --primary-hover: #45a049;
-            --secondary-color: #f44336; --secondary-hover: #da190b;
-            --background-color: #000; --text-color: #fff;
-            --ui-background: rgba(0,0,0,0.85); --input-bg: #333;
-            --input-border: #555; --disabled-color: #555; --disabled-opacity: 0.6;
-            --font-stack: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        body { margin: 0; overflow: hidden; font-family: var(--font-stack); background-color: var(--background-color); color: var(--text-color); overscroll-behavior: none; -webkit-text-size-adjust: none; /* Prevent iOS font scaling */}
-        canvas { display: block; }
-        #gameContainer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; background-color: #333; /* Fallback bg */ }
-        #gameUI { position: absolute; top: 10px; left: 10px; color: var(--text-color); font-size: clamp(14px, 2.5vw, 18px); text-shadow: 1px 1px 3px rgba(0,0,0,0.9); z-index: 10; user-select: none; -webkit-user-select: none; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 5px;}
-        #gameUI > div { margin-bottom: 3px; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); pointer-events: none; z-index: 5; opacity: 0.8; filter: drop-shadow(0 0 2px rgba(0, 0, 0, 1)); }
-        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--ui-background); display: flex; flex-direction: column; justify-content: center; align-items: center; color: var(--text-color); z-index: 100; text-align: center; padding: 20px; box-sizing: border-box; overflow-y: auto; }
-        #uploadScreen { display: flex; }
-        #settingsScreen, #gameOverScreen { display: none; }
-        .screen h1 { font-size: clamp(32px, 8vw, 48px); margin-bottom: 20px; }
-        .screen h2 { font-size: clamp(28px, 7vw, 40px); margin-bottom: 20px; }
-        .screen p { font-size: clamp(16px, 4vw, 18px); margin-bottom: 30px; max-width: 90%; line-height: 1.5; }
-        .button { background-color: var(--primary-color); border: none; color: var(--text-color); padding: 15px 32px; text-align: center; text-decoration: none; display: inline-block; font-size: clamp(14px, 4vw, 16px); margin: 10px 5px; cursor: pointer; border-radius: 5px; transition: background-color 0.3s ease, opacity 0.3s ease, transform 0.1s ease; min-width: 120px; font-weight: bold; user-select: none; -webkit-user-select: none; }
-        .button:hover:not(:disabled) { background-color: var(--primary-hover); transform: scale(1.03); }
-        .button:active:not(:disabled) { transform: scale(0.98); }
-        .button:disabled { background-color: var(--disabled-color); cursor: not-allowed; opacity: var(--disabled-opacity); }
-        .button.secondary { background-color: var(--secondary-color); }
-        .button.secondary:hover:not(:disabled) { background-color: var(--secondary-hover); }
-        #uploadScreen .upload-section { margin-bottom: 20px; width: 90%; max-width: 400px; }
-        #uploadScreen label { display: block; margin: 15px 0 5px 0; font-weight: bold; font-size: clamp(16px, 4vw, 18px); }
-        #uploadScreen input[type="file"] { display: none; }
-        #uploadScreen .file-label { display: inline-block; padding: 10px 15px; border: 1px dashed var(--input-border); border-radius: 4px; background-color: var(--input-bg); color: #ccc; cursor: pointer; transition: background-color 0.2s, border-color 0.2s; width: 80%; max-width: 300px; text-align: center; margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
-        #uploadScreen .file-label:hover { background-color: #444; border-color: #777; }
-        #uploadScreen .status { display: inline-block; margin-left: 10px; font-weight: bold; font-size: 14px; min-width: 120px; text-align: left; vertical-align: middle; }
-        #uploadScreen .status.pending { color: #ffcc00; }
-        #uploadScreen .status.loading { color: #87CEEB; animation: pulse 1.5s infinite; }
-        #uploadScreen .status.loaded { color: var(--primary-color); }
-        #uploadScreen .status.error { color: var(--secondary-color); }
-        #uploadErrorLog { color: var(--secondary-color); margin-top: 15px; font-size: 14px; font-weight: bold; min-height: 20px;}
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
-        .settings-grid { display: grid; grid-template-columns: auto 1fr auto; gap: 12px 15px; margin-bottom: 20px; align-items: center; max-width: 450px; width: 90%; font-size: clamp(14px, 3.5vw, 16px); }
-        .settings-grid div:nth-child(3n+1) { font-weight: bold; text-align: right; } /* Labels */
-        .settings-grid select, .settings-grid input[type="range"] { width: 100%; padding: 6px; box-sizing: border-box; background-color: var(--input-bg); color: white; border: 1px solid var(--input-border); border-radius: 3px; cursor: pointer; }
-         .settings-grid input[type="range"] { cursor: grab; }
-         .settings-grid input[type="range"]:active { cursor: grabbing; }
-        .settings-grid span { text-align: left; padding-left: 5px; min-width: 35px; display: inline-block; font-weight: bold;} /* Value display */
-        .health-bar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 200px; height: 20px; background-color: rgba(50,50,50,0.7); border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.3); z-index: 10; display: block; /* Ensure visible */}
-        .health-fill { height: 100%; background-color: var(--primary-color); width: 100%; transition: width 0.3s ease-in-out, background-color 0.3s ease-in-out; border-radius: 8px 0 0 8px; }
-        #gunEffects { position: absolute; top:0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
-        #hitMarker { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1); color: red; font-size: 30px; font-weight: bold; opacity: 0; transition: opacity 0.1s ease-out, transform 0.1s ease-out; z-index: 6; text-shadow: 0 0 5px white; user-select: none; -webkit-user-select: none; }
-        #settingsButton { /* Moved from #gameUI to be its own element */
-            position: absolute; top: 10px; right: 10px; background-color: rgba(100,100,100,0.6);
-            color: white; border: 1px solid rgba(255,255,255,0.4); border-radius: 5px;
-            padding: 8px 12px; cursor: pointer; font-size: 16px;
-            transition: background-color 0.3s ease; z-index: 11; user-select: none; -webkit-user-select: none;
-        }
-        #settingsButton:hover { background-color: rgba(120,120,120,0.8); }
-        #mobileControls { position: absolute; bottom: 0; left: 0; width: 100%; height: 180px; display: none; justify-content: space-between; align-items: flex-end; z-index: 20; pointer-events: none; box-sizing: border-box; padding: 20px; -webkit-tap-highlight-color: transparent; }
-        #joystick { pointer-events: auto; width: 130px; height: 130px; background-color: rgba(255,255,255,0.15); border-radius: 50%; position: relative; border: 2px solid rgba(255,255,255,0.3); align-self: center; margin-bottom: 10px; user-select: none; -webkit-user-select: none; }
-        #joystickKnob { width: 60px; height: 60px; background-color: rgba(255,255,255,0.4); border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 1px solid rgba(255,255,255,0.6); transition: transform 0.05s linear; }
-        #mobileActionButtons { pointer-events: auto; display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); gap: 15px; width: 180px; height: 180px; align-self: center; margin-bottom: 10px; }
-        .mobile-button { pointer-events: auto; background-color: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.4); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px; text-shadow: 1px 1px 2px black; box-shadow: 0 0 10px rgba(0,0,0,0.2); cursor: pointer; user-select: none; -webkit-user-select: none; transition: background-color 0.1s ease-out, transform 0.05s ease-out; }
-        #shootButton { grid-column: 2/3; grid-row: 1/3; background-color: rgba(255,0,0,0.3); border-color: rgba(255,0,0,0.5); font-size: 16px; }
-        #jumpButton { grid-column: 1/2; grid-row: 1/2; background-color: rgba(0,150,255,0.3); border-color: rgba(0,150,255,0.5); }
-        #reloadButton { grid-column: 1/2; grid-row: 2/3; background-color: rgba(255,165,0,0.3); border-color: rgba(255,165,0,0.5); }
-        .mobile-button.active { transform: scale(0.95); }
-        #shootButton.active { background-color: rgba(255, 0, 0, 0.6); }
-        #jumpButton.active { background-color: rgba(0, 150, 255, 0.6); }
-        #reloadButton.active { background-color: rgba(255, 165, 0, 0.6); }
-        #vibeJamLink { font-family: var(--font-stack); position: fixed; bottom: 0px; right: 0px; padding: 8px 12px; font-size: 14px; font-weight: bold; background: var(--text-color); color: var(--background-color); text-decoration: none; z-index: 10000; border: 1px solid #ccc; border-top-left-radius: 12px; opacity: 0.8; transition: opacity 0.3s ease, background-color 0.3s, color 0.3s; }
-        #vibeJamLink:hover { opacity: 1.0; background-color: var(--primary-color); color: var(--text-color); }
 
-    </style>
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+  <title>FPS Game - Vibe Jam</title> <!-- Updated Title -->
+
+  <style>
+    /* --- CSS Styles --- */
+
+    :root {
+
+      --primary-color: #4CAF50;
+
+      --primary-hover: #45a049;
+
+      --secondary-color: #f44336;
+
+      --secondary-hover: #da190b;
+
+      --background-color: #000;
+
+      --text-color: #fff;
+
+      --ui-background: rgba(0, 0, 0, 0.85);
+
+      --input-bg: #333;
+
+      --input-border: #555;
+
+      --disabled-color: #555;
+
+      --disabled-opacity: 0.6;
+
+      --font-stack: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      /* Cleaner Font */
+
+    }
+
+    body {
+
+      margin: 0;
+
+      overflow: hidden;
+
+      font-family: var(--font-stack);
+
+      background-color: var(--background-color);
+
+      color: var(--text-color);
+
+      overscroll-behavior: none;
+      /* Prevent pull-to-refresh */
+
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #gameContainer {
+      /* Added container for canvas etc. */
+
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      /* Hidden initially */
+
+    }
+
+    #gameUI {
+
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: var(--text-color);
+      font-size: 18px;
+
+      text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.9);
+      /* Slightly stronger shadow */
+
+      z-index: 10;
+      user-select: none;
+      -webkit-user-select: none;
+
+    }
+
+    #gameUI>div {
+      margin-bottom: 5px;
+    }
+
+    /* Spacing for UI elements */
+
+    #crosshair {
+
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0.8;
+
+      filter: drop-shadow(0 0 2px rgba(0, 0, 0, 1));
+      /* Add shadow to crosshair */
+
+    }
+
+    .screen {
+
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+
+      background-color: var(--ui-background);
+      display: flex;
+      flex-direction: column;
+
+      justify-content: center;
+      align-items: center;
+      color: var(--text-color);
+
+      z-index: 100;
+      text-align: center;
+      padding: 20px;
+      box-sizing: border-box;
+
+      overflow-y: auto;
+      /* Allow scrolling if content overflows on small screens */
+
+    }
+
+    /* Initial Screen States */
+
+    #uploadScreen {
+      display: flex;
+    }
+
+    /* Show upload screen first */
+
+    #settingsScreen,
+    #gameOverScreen {
+      display: none;
+    }
+
+    /* StartScreen removed, combined logic */
+
+    .screen h1 {
+      font-size: clamp(32px, 8vw, 48px);
+      margin-bottom: 20px;
+    }
+
+    .screen h2 {
+      font-size: clamp(28px, 7vw, 40px);
+      margin-bottom: 20px;
+    }
+
+    .screen p {
+      font-size: clamp(16px, 4vw, 18px);
+      margin-bottom: 30px;
+      max-width: 90%;
+      line-height: 1.5;
+    }
+
+    .button {
+
+      background-color: var(--primary-color);
+      border: none;
+      color: var(--text-color);
+
+      padding: 15px 32px;
+      text-align: center;
+      text-decoration: none;
+
+      display: inline-block;
+      font-size: clamp(14px, 4vw, 16px);
+      margin: 10px 5px;
+
+      cursor: pointer;
+      border-radius: 5px;
+
+      transition: background-color 0.3s ease, opacity 0.3s ease, transform 0.1s ease;
+
+      min-width: 120px;
+      font-weight: bold;
+      user-select: none;
+      -webkit-user-select: none;
+
+    }
+
+    .button:hover:not(:disabled) {
+      background-color: var(--primary-hover);
+      transform: scale(1.03);
+    }
+
+    .button:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .button:disabled {
+
+      background-color: var(--disabled-color);
+      cursor: not-allowed;
+      opacity: var(--disabled-opacity);
+
+    }
+
+    .button.secondary {
+      background-color: var(--secondary-color);
+    }
+
+    .button.secondary:hover:not(:disabled) {
+      background-color: var(--secondary-hover);
+    }
+
+    /* Upload Screen Specifics */
+
+    #uploadScreen .upload-section {
+      margin-bottom: 20px;
+      width: 90%;
+      max-width: 400px;
+    }
+
+    #uploadScreen label {
+      display: block;
+      margin: 15px 0 5px 0;
+      font-weight: bold;
+      font-size: clamp(16px, 4vw, 18px);
+    }
+
+    #uploadScreen input[type="file"] {
+      display: none;
+    }
+
+    /* Hide default input */
+
+    #uploadScreen .file-label {
+
+      display: inline-block;
+      padding: 10px 15px;
+      border: 1px dashed var(--input-border);
+
+      border-radius: 4px;
+      background-color: var(--input-bg);
+      color: #ccc;
+
+      cursor: pointer;
+      transition: background-color 0.2s, border-color 0.2s;
+
+      width: 80%;
+      max-width: 300px;
+      text-align: center;
+      margin-bottom: 10px;
+
+    }
+
+    #uploadScreen .file-label:hover {
+      background-color: #444;
+      border-color: #777;
+    }
+
+    #uploadScreen .status {
+
+      display: inline-block;
+      margin-left: 10px;
+      font-weight: bold;
+
+      font-size: 14px;
+      min-width: 120px;
+      text-align: left;
+      vertical-align: middle;
+
+    }
+
+    #uploadScreen .status.pending {
+      color: #ffcc00;
+    }
+
+    #uploadScreen .status.loading {
+      color: #87CEEB;
+      animation: pulse 1.5s infinite;
+    }
+
+    #uploadScreen .status.loaded {
+      color: var(--primary-color);
+    }
+
+    #uploadScreen .status.error {
+      color: var(--secondary-color);
+    }
+
+    #uploadErrorLog {
+      color: var(--secondary-color);
+      margin-top: 15px;
+      font-size: 14px;
+      font-weight: bold;
+      min-height: 20px;
+    }
+
+    @keyframes pulse {
+      0% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.6;
+      }
+
+      100% {
+        opacity: 1;
+      }
+    }
+
+    /* Settings Screen */
+
+    .settings-grid {
+
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      /* Label | Control | Value */
+
+      gap: 12px 15px;
+      margin-bottom: 20px;
+      align-items: center;
+      max-width: 450px;
+
+      width: 90%;
+      font-size: clamp(14px, 3.5vw, 16px);
+
+    }
+
+    .settings-grid div:nth-child(3n+1) {
+      font-weight: bold;
+      text-align: right;
+    }
+
+    /* Labels */
+
+    .settings-grid select,
+    .settings-grid input[type="range"] {
+
+      width: 100%;
+      padding: 6px;
+      box-sizing: border-box;
+      background-color: #555;
+
+      color: white;
+      border: 1px solid #888;
+      border-radius: 3px;
+
+      cursor: pointer;
+
+    }
+
+    .settings-grid input[type="range"] {
+      cursor: grab;
+    }
+
+    .settings-grid input[type="range"]:active {
+      cursor: grabbing;
+    }
+
+    .settings-grid span {
+      text-align: left;
+      padding-left: 5px;
+      min-width: 35px;
+      display: inline-block;
+      font-weight: bold;
+    }
+
+    /* Value display */
+
+    /* In-Game UI */
+
+    .health-bar {
+
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+
+      width: 200px;
+      height: 20px;
+      background-color: rgba(50, 50, 50, 0.7);
+
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      z-index: 10;
+
+    }
+
+    .health-fill {
+
+      height: 100%;
+      background-color: var(--primary-color);
+      width: 100%;
+
+      transition: width 0.3s ease-in-out, background-color 0.3s ease-in-out;
+
+      border-radius: 8px 0 0 8px;
+      /* Keep left radius */
+
+    }
+
+    #gunEffects {
+
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 100%;
+      height: 100%;
+
+      pointer-events: none;
+      z-index: 5;
+
+    }
+
+    #hitMarker {
+
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(1);
+
+      color: red;
+      font-size: 30px;
+      font-weight: bold;
+      opacity: 0;
+
+      transition: opacity 0.1s ease-out, transform 0.1s ease-out;
+      z-index: 6;
+
+      text-shadow: 0 0 5px white;
+      user-select: none;
+      -webkit-user-select: none;
+
+    }
+
+    .settings-btn {
+
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(100, 100, 100, 0.6);
+
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: 5px;
+
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 16px;
+
+      transition: background-color 0.3s ease;
+      z-index: 11;
+
+    }
+
+    .settings-btn:hover {
+      background-color: rgba(120, 120, 120, 0.8);
+    }
+
+    /* Mobile Controls */
+
+    #mobileControls {
+
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 180px;
+
+      display: none;
+      /* Toggled by JS */
+
+      justify-content: space-between;
+      align-items: flex-end;
+
+      z-index: 20;
+      pointer-events: none;
+      box-sizing: border-box;
+      padding: 20px;
+
+      -webkit-tap-highlight-color: transparent;
+      /* Remove tap highlight */
+
+    }
+
+    #joystick {
+
+      pointer-events: auto;
+      width: 130px;
+      height: 130px;
+
+      background-color: rgba(255, 255, 255, 0.15);
+      border-radius: 50%;
+      position: relative;
+
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      align-self: center;
+      margin-bottom: 10px;
+
+      user-select: none;
+      -webkit-user-select: none;
+
+    }
+
+    #joystickKnob {
+
+      width: 60px;
+      height: 60px;
+      background-color: rgba(255, 255, 255, 0.4);
+
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+
+      transform: translate(-50%, -50%);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+
+      transition: transform 0.05s linear;
+      /* Smooth knob return */
+
+    }
+
+    #mobileActionButtons {
+
+      pointer-events: auto;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+
+      grid-template-rows: repeat(2, 1fr);
+      gap: 15px;
+      width: 180px;
+      height: 180px;
+
+      align-self: center;
+      margin-bottom: 10px;
+
+    }
+
+    .mobile-button {
+
+      pointer-events: auto;
+      background-color: rgba(255, 255, 255, 0.2);
+
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-radius: 50%;
+      display: flex;
+
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+
+      font-size: 14px;
+      text-shadow: 1px 1px 2px black;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+
+      transition: background-color 0.1s ease-out, transform 0.05s ease-out;
+
+    }
+
+    #shootButton {
+      grid-column: 2/3;
+      grid-row: 1/3;
+      background-color: rgba(255, 0, 0, 0.3);
+      border-color: rgba(255, 0, 0, 0.5);
+      font-size: 16px;
+    }
+
+    #jumpButton {
+      grid-column: 1/2;
+      grid-row: 1/2;
+      background-color: rgba(0, 150, 255, 0.3);
+      border-color: rgba(0, 150, 255, 0.5);
+    }
+
+    #reloadButton {
+      grid-column: 1/2;
+      grid-row: 2/3;
+      background-color: rgba(255, 165, 0, 0.3);
+      border-color: rgba(255, 165, 0, 0.5);
+    }
+
+    /* Active states for mobile buttons */
+
+    .mobile-button.active {
+      transform: scale(0.95);
+    }
+
+    #shootButton.active {
+      background-color: rgba(255, 0, 0, 0.6);
+    }
+
+    #jumpButton.active {
+      background-color: rgba(0, 150, 255, 0.6);
+    }
+
+    #reloadButton.active {
+      background-color: rgba(255, 165, 0, 0.6);
+    }
+
+    /* Vibe Jam Link Style */
+
+    #vibeJamLink {
+
+      font-family: var(--font-stack);
+      position: fixed;
+      bottom: 0px;
+      right: 0px;
+
+      padding: 8px 12px;
+      font-size: 14px;
+      font-weight: bold;
+
+      background: var(--text-color);
+      color: var(--background-color);
+      text-decoration: none;
+
+      z-index: 10000;
+      border: 1px solid #ccc;
+      border-top-left-radius: 12px;
+
+      opacity: 0.8;
+      transition: opacity 0.3s ease, background-color 0.3s, color 0.3s;
+
+    }
+
+    #vibeJamLink:hover {
+      opacity: 1.0;
+      background-color: var(--primary-color);
+      color: var(--text-color);
+    }
+  </style>
+
 </head>
+
 <body>
-    <!-- --- HTML Content --- -->
 
-    <!-- Upload Screen (Initial) -->
-    <div id="uploadScreen" class="screen">
-        <h1>FPS Game Setup</h1>
-        <p>Select your game models (.glb or .gltf).</p>
-        <p style="font-size: 14px; color: #ccc;">(Rigged character recommended for target animations)</p>
+  <!-- --- HTML Content --- -->
 
-        <div class="upload-section">
-            <label for="gunInput">1. Gun Model (Viewmodel):</label>
-            <label class="file-label" for="gunInput" id="gunFileLabel">Select Gun Model</label>
-            <input type="file" id="gunInput" accept=".glb,.gltf">
-            <span id="gunStatus" class="status pending">Pending</span>
-        </div>
+  <!-- Upload Screen (Initial) -->
 
-        <div class="upload-section">
-            <label for="charInput">2. Character Model (Target):</label>
-            <label class="file-label" for="charInput" id="charFileLabel">Select Character Model</label>
-            <input type="file" id="charInput" accept=".glb,.gltf">
-            <span id="charStatus" class="status pending">Pending</span>
-        </div>
+  <div id="uploadScreen" class="screen">
 
-        <div id="uploadErrorLog"></div>
-        <button id="startFromUploadButton" class="button" disabled>Start Game</button>
+    <h1>FPS Game Setup</h1>
+
+    <p>Please select your game models (.glb or .gltf format).</p>
+
+    <p style="font-size: 14px; color: #ccc;">(Rigged character model recommended for animations)</p>
+
+    <div class="upload-section">
+
+      <label for="gunInput">1. Upload Gun Model:</label>
+
+      <label class="file-label" for="gunInput" id="gunFileLabel">Select Gun Model</label>
+
+      <input type="file" id="gunInput" accept=".glb,.gltf">
+
+      <span id="gunStatus" class="status pending">Pending</span>
+
     </div>
 
-    <!-- Main Game Container -->
-    <div id="gameContainer">
-        <!-- Canvas will be appended here by Graphics.init -->
-        <div id="gameUI">
-            <div>Score: <span id="score">0</span></div>
-            <div>Ammo: <span id="ammo">30</span> / <span id="maxAmmo">30</span></div>
-            <div>Time Left: <span id="timer">60</span>s</div>
-        </div>
-        <!-- Settings button moved outside gameUI div for independent positioning -->
-        <button id="settingsButton" class="settings-btn" title="Settings">⚙️</button>
-        <div class="health-bar"> <div class="health-fill" id="healthFill"></div> </div>
-        <img id="crosshair" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMSIgZmlsbD0iI2ZmZiIvPjxsaW5lIHgxPSIxMCIgeTE9IjIiIHgyPSIxMCIgeTI9IjgiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2Utb3BhY2l0eT0iMC44Ii8+PGxpbmUgeDE9IjEwIiB5MT0iMTIiIHgyPSIxMCIgeTI9IjE4IiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLW9wYWNpdHk9IjAuOCIvPjxsaW5lIHgxPSIyIiB5MT0iMTAiIHgyPSI4IiB5Mj0iMTAiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2Utb3BhY2l0eT0iMC44Ii8+PGxpbmUgeDE9IjEyIiB5MT0iMTAiIHgyPSIxOCIgeTI9IjEwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLW9wYWNpdHk9IjAuOCIvPjwvc3ZnPg==" alt="Crosshair"> <!-- Slightly simpler crosshair -->
-        <div id="hitMarker">✕</div>
-        <div id="gunEffects"></div>
-        <!-- Mobile Controls -->
-        <div id="mobileControls">
-            <div id="joystick"> <div id="joystickKnob"></div> </div>
-            <div id="mobileActionButtons">
-                 <div id="shootButton" class="mobile-button">Shoot</div>
-                 <div id="jumpButton" class="mobile-button">Jump</div>
-                 <div id="reloadButton" class="mobile-button">Reload</div>
-            </div>
-        </div>
-    </div> <!-- End #gameContainer -->
+    <div class="upload-section">
 
-    <!-- Settings Screen -->
-    <div id="settingsScreen" class="screen">
-        <h2>Settings</h2>
-        <div class="settings-grid">
-            <!-- Key Bindings - Add more options here! Use event.code values -->
-            <div>Forward:</div> <select id="forwardKey"> <option value="KeyW">W</option><option value="ArrowUp">Up Arrow</option></select> <span></span>
-            <div>Backward:</div> <select id="backwardKey"> <option value="KeyS">S</option><option value="ArrowDown">Down Arrow</option></select> <span></span>
-            <div>Left:</div> <select id="leftKey"> <option value="KeyA">A</option><option value="ArrowLeft">Left Arrow</option></select> <span></span>
-            <div>Right:</div> <select id="rightKey"> <option value="KeyD">D</option><option value="ArrowRight">Right Arrow</option></select> <span></span>
-            <div>Jump:</div> <select id="jumpKey"> <option value="Space">Space</option><option value="ShiftRight">R Shift</option></select> <span></span>
-            <div>Reload:</div> <select id="reloadKey"> <option value="KeyR">R</option><option value="KeyF">F</option></select> <span></span>
+      <label for="charInput">2. Upload Character Model (Target):</label>
 
-            <!-- Audio -->
-             <div>Music Vol:</div> <input type="range" id="musicVolume" min="0" max="1" step="0.05" value="0.5"> <span id="musicVolumeLabel">0.50</span>
-             <div>SFX Vol:</div> <input type="range" id="sfxVolume" min="0" max="1" step="0.05" value="0.7"> <span id="sfxVolumeLabel">0.70</span>
+      <label class="file-label" for="charInput" id="charFileLabel">Select Character Model</label>
 
-            <!-- Controls -->
-             <div>Sensitivity:</div> <input type="range" id="sensitivity" min="0.0005" max="0.005" step="0.0001" value="0.002"> <span id="sensitivityLabel">2.0</span>
+      <input type="file" id="charInput" accept=".glb,.gltf">
 
-            <!-- Graphics -->
-             <div>Shadows:</div> <select id="shadowQuality"> <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select> <span></span>
-        </div>
-        <div style="margin-top: 25px;">
-            <button id="saveSettings" class="button">Apply & Close</button>
-            <button id="cancelSettings" class="button secondary">Cancel</button>
-        </div>
+      <span id="charStatus" class="status pending">Pending</span>
+
     </div>
 
-    <!-- Game Over Screen -->
-    <div id="gameOverScreen" class="screen">
-        <h1>Game Over</h1>
-        <p>Final Score: <span id="finalScore">0</span></p>
-        <button id="restartButton" class="button">Restart Game</button>
-        <button id="mainMenuButton" class="button secondary">Back to Upload</button>
+    <div id="uploadErrorLog"></div>
+
+    <button id="startFromUploadButton" class="button" disabled>Start Game</button>
+
+  </div>
+
+  <!-- Main Game Container (Hidden initially) -->
+
+  <div id="gameContainer">
+
+    <div id="gameUI">
+
+      <div>Score: <span id="score">0</span></div>
+
+      <div>Ammo: <span id="ammo">30</span> / <span id="maxAmmo">30</span></div>
+
+      <div>Time Left: <span id="timer">60</span>s</div>
+
+      <button id="settingsButton" class="settings-btn">⚙️ Settings</button>
+
     </div>
 
+    <div class="health-bar">
+      <div class="health-fill" id="healthFill"></div>
+    </div>
 
-    <!-- Vibe Jam Link -->
-    <a id="vibeJamLink" target="_blank" href="https://jam.pieter.com">Built for Vibe Jam</a>
+    <img id="crosshair" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMSIgZmlsbD0iI2ZmZiIgZmlsbC1vcGFjaXR5PSIwLjkiLz4KICA8bGluZSB4MT0iMTAiIHkxPSIwIiB4Mj0iMTAiIHkyPSI4IiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2Utb3BhY2l0eT0iMC44Ii8+CiAgPGxpbmUgeDE9IjEwIiB5MT0iMTIiIHgyPSIxMCIgeTI9IjIwIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2Utb3BhY2l0eT0iMC44Ii8+CiAgPGxpbmUgeDE9IjAiIHkxPSIxMCIgeDI9IjgiIHkyPSIxMCIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLW9wYWNpdHk9IjAuOCIvPgogIDxsaW5lIHgxPSIxMiIgeTE9IjEwIiB4Mj0iMjAiIHkyPSIxMCIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLW9wYWNpdHk9IjAuOCIvPgo8L3N2Zz4=" alt="Crosshair">
 
-    <!-- --- External Libraries (Order Matters!) --- -->
-    <!-- THREE.js Core -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.128.0/three.min.js"></script>
-    <!-- Physics Engine -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
-    <!-- THREE.js Addons -->
-    <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <!-- IMPORTANT: SkeletonUtils for cloning rigged models -->
-    <script src="https://unpkg.com/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+    <div id="hitMarker">✕</div>
 
-    <!-- --- Your Game Script --- -->
+    <div id="gunEffects"></div>
+
+    <!-- Mobile Controls (remain inside gameContainer) -->
+
+    <div id="mobileControls">
+
+      <div id="joystick">
+        <div id="joystickKnob"></div>
+      </div>
+
+      <div id="mobileActionButtons">
+
+        <div id="shootButton" class="mobile-button">Shoot</div>
+
+        <div id="jumpButton" class="mobile-button">Jump</div>
+
+        <div id="reloadButton" class="mobile-button">Reload</div>
+
+      </div>
+
+    </div>
+
+  </div> <!-- End #gameContainer -->
+
+  <!-- Settings Screen (remain outside gameContainer) -->
+
+  <div id="settingsScreen" class="screen">
+
+    <h2>Settings</h2>
+
+    <div class="settings-grid">
+
+      <!-- Key Bindings -->
+
+      <div>Forward:</div> <select id="forwardKey" class="keyBinding">
+        <option value="KeyW">W</option>
+        <option value="ArrowUp">Up Arrow</option>
+      </select> <span></span>
+
+      <div>Backward:</div> <select id="backwardKey" class="keyBinding">
+        <option value="KeyS">S</option>
+        <option value="ArrowDown">Down Arrow</option>
+      </select> <span></span>
+
+      <div>Left:</div> <select id="leftKey" class="keyBinding">
+        <option value="KeyA">A</option>
+        <option value="ArrowLeft">Left Arrow</option>
+      </select> <span></span>
+
+      <div>Right:</div> <select id="rightKey" class="keyBinding">
+        <option value="KeyD">D</option>
+        <option value="ArrowRight">Right Arrow</option>
+      </select> <span></span>
+
+      <div>Jump:</div> <select id="jumpKey" class="keyBinding">
+        <option value="Space">Space</option>
+        <option value="ShiftLeft">L Shift</option>
+        <option value="ControlLeft">L Ctrl</option>
+      </select> <span></span>
+
+      <div>Reload:</div> <select id="reloadKey" class="keyBinding">
+        <option value="KeyR">R</option>
+        <option value="KeyF">F</option>
+        <option value="KeyE">E</option>
+      </select> <span></span>
+
+      <!-- Audio -->
+
+      <div>Music Vol:</div> <input type="range" id="musicVolume" min="0" max="1" step="0.05" value="0.5"> <span id="musicVolumeLabel">0.5</span>
+
+      <div>SFX Vol:</div> <input type="range" id="sfxVolume" min="0" max="1" step="0.05" value="0.7"> <span id="sfxVolumeLabel">0.7</span>
+
+      <!-- Controls -->
+
+      <div>Sensitivity:</div> <input type="range" id="sensitivity" min="0.0005" max="0.005" step="0.0001" value="0.002"> <span id="sensitivityLabel">2.0</span>
+
+      <!-- Graphics -->
+
+      <div>Shadows:</div> <select id="shadowQuality">
+        <option value="low">Low</option>
+        <option value="medium" selected>Medium</option>
+        <option value="high">High</option>
+      </select> <span></span>
+
+    </div>
+
+    <div style="margin-top: 25px;">
+
+      <button id="saveSettings" class="button">Apply & Close</button>
+
+      <button id="cancelSettings" class="button secondary">Cancel</button>
+
+    </div>
+
+  </div>
+
+  <!-- Game Over Screen (remain outside gameContainer) -->
+
+  <div id="gameOverScreen" class="screen">
+
+    <h1>Game Over</h1>
+
+    <p>Final Score: <span id="finalScore">0</span></p>
+
+    <button id="restartButton" class="button">Restart Game</button>
+
+    <button id="mainMenuButton" class="button secondary">Back to Upload</button> <!-- Added Back button -->
+
+  </div>
+
+  <!-- Vibe Jam Link -->
+
+  <a id="vibeJamLink" target="_blank" href="https://jam.pieter.com">Built for Vibe Jam</a>
+
+  <!-- --- External Libraries --- -->
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+
+  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+  <!-- IMPORTANT: Added SkeletonUtils for cloning rigged models -->
+
+  <script src="https://unpkg.com/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+
+      <!-- --- Your Game Script --- -->
   <script src="script.js"></script>
 </body>
 </html>
