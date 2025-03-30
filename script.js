@@ -1,4 +1,3 @@
-
 // --- Constants ---
 const MAX_FILE_SIZE_MB = 50; // Example limit
 
