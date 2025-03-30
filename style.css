@@ -1,1 +1,532 @@
+/* --- Global & Body --- */
+* {
+    box-sizing: border-box;
+    user-select: none; /* Prevent text selection */
+    -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+}
 
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden; /* Prevent scrollbars */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #1a1a2a; /* Dark blue background */
+    color: #eee;
+}
+
+body.is-mobile #settingsButton .settings-btn-text {
+    display: none; /* Hide text on mobile button */
+}
+
+canvas#gameCanvas {
+    display: block; /* Removes bottom space */
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    cursor: crosshair; /* Default cursor */
+}
+
+/* --- HUD --- */
+#gameUI {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    pointer-events: none; /* Allow clicks to pass through */
+    color: #fff;
+    font-size: 1.1em;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+    padding: 15px;
+    display: block; /* Managed by JS, but default is block when shown */
+}
+
+.hud-top-left { position: absolute; top: 15px; left: 15px; }
+.hud-top-right { position: absolute; top: 15px; right: 15px; text-align: right; }
+.hud-bottom-left { position: absolute; bottom: 15px; left: 15px; }
+.hud-bottom-right { position: absolute; bottom: 15px; right: 15px; text-align: right; }
+
+#scoreDisplay, #timerDisplay, #ammoDisplay, #healthDisplay {
+    margin-bottom: 8px;
+}
+
+#comboDisplay {
+    margin-top: 10px;
+    height: 40px; /* Reserve space */
+}
+.combo-indicator {
+    font-weight: bold;
+    font-size: 1.3em;
+    color: #ffae00; /* Orange/Gold color */
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.9);
+}
+.combo-label {
+    display: block;
+    font-size: 0.7em;
+    color: #ffdd80;
+}
+
+#ammoValue, #ammoMaxValue, #timerValue, #scoreValue, #healthValue {
+    font-weight: bold;
+    font-size: 1.1em; /* Make values slightly larger */
+}
+.total-ammo {
+    font-size: 0.85em;
+    opacity: 0.8;
+    margin-left: 4px;
+}
+
+/* Health Bar */
+.health-bar {
+    width: 180px;
+    height: 22px;
+    background-color: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden; /* Hide fill overflow */
+}
+.health-fill {
+    height: 100%;
+    background-color: #66cc66; /* Default green */
+    transition: width 0.3s ease-out, background-color 0.3s ease-out;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+#healthValueDisplay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9em;
+    font-weight: bold;
+    color: #ffffff;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.9);
+}
+
+/* Reload Indicator */
+#reloadIndicator {
+    font-size: 0.9em;
+    font-weight: bold;
+    color: #ffcc00;
+    margin-bottom: 5px;
+}
+.reload-fill-container {
+    display: inline-block;
+    width: 60px;
+    height: 8px;
+    background-color: rgba(0,0,0,0.5);
+    border: 1px solid #aaa;
+    margin-left: 5px;
+    vertical-align: middle;
+}
+.reload-fill {
+    height: 100%;
+    width: 0%; /* Controlled by JS */
+    background-color: #ffcc00;
+    transition: width 0.05s linear; /* Smooth progress */
+}
+
+
+/* Center Screen UI Elements */
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 16px;
+    height: 16px;
+    z-index: 11;
+}
+.crosshair-line {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 0 3px rgba(0,0,0,0.8);
+}
+.crosshair-line-h { /* Horizontal line */
+    width: 100%;
+    height: 2px;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+}
+.crosshair-line-v { /* Vertical line */
+    width: 2px;
+    height: 100%;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+
+#hitMarker {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #ff4444; /* Red color */
+    background-color: rgba(255, 68, 68, 0.5);
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0;
+    transition: opacity 0.1s ease-out, transform 0.1s ease-out;
+    border-radius: 50%; /* Circle marker */
+    z-index: 12;
+}
+
+#gunEffects {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100px;
+    height: 100px;
+    /* Position near center bottom for muzzle flash */
+    transform: translate(-50%, 100%);
+    z-index: 11;
+    /* border: 1px solid red; */ /* For debugging position */
+}
+
+.muzzle-flash {
+    position: absolute;
+    bottom: 0; /* Position at the bottom of the container */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 80px;
+    background: radial-gradient(circle, rgba(255,220,100,0.8) 0%, rgba(255,180,50,0.4) 40%, rgba(255,150,0,0) 70%);
+    border-radius: 50%;
+    opacity: 1;
+    animation: muzzleFlashFade 0.1s ease-out forwards;
+}
+
+@keyframes muzzleFlashFade {
+    from { opacity: 1; transform: translateX(-50%) scale(1); }
+    to   { opacity: 0; transform: translateX(-50%) scale(0.5); }
+}
+
+
+/* --- UI Screens (Start, Pause, Game Over, Settings) --- */
+.ui-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(10, 10, 20, 0.9); /* Dark semi-transparent */
+    z-index: 20;
+    display: none; /* Hidden by default */
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    backdrop-filter: blur(5px); /* Optional blur effect */
+}
+.ui-screen.show {
+    display: flex; /* Show screen */
+}
+
+.screen-content {
+    background-color: rgba(30, 30, 50, 0.85);
+    padding: 30px 40px;
+    border-radius: 10px;
+    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
+    max-width: 90%;
+    width: 500px; /* Max width for content */
+}
+
+.ui-screen h1 {
+    margin-top: 0;
+    color: #fff;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+}
+.ui-screen p {
+    margin-bottom: 25px;
+    font-size: 1.1em;
+    color: #ccc;
+}
+
+/* Buttons */
+.ui-button {
+    padding: 12px 25px;
+    font-size: 1.1em;
+    background-color: #4a4a70;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s ease-out, transform 0.1s ease-out;
+    margin: 5px;
+    min-width: 150px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.4);
+    touch-action: manipulation; /* Prevent zoom on double tap */
+}
+.ui-button:hover {
+    background-color: #5a5a85;
+}
+.ui-button:active {
+    transform: scale(0.97);
+}
+.ui-button.primary {
+    background-color: #5080cc; /* Blue */
+}
+.ui-button.primary:hover {
+    background-color: #6090dd;
+}
+
+.game-over-stats p {
+    font-size: 1.2em;
+    margin: 10px 0;
+}
+.game-over-stats span {
+    font-weight: bold;
+    color: #ffae00;
+}
+
+/* Settings Button */
+.settings-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px; /* Changed from left to right */
+  padding: 8px 15px;
+  font-size: 1.1em; /* Slightly larger */
+  background-color: rgba(0, 0, 0, 0.4);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s ease-out, opacity 0.3s ease-out;
+  z-index: 50; /* Above HUD, below screens */
+  opacity: 0.8;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+  touch-action: manipulation;
+}
+
+.settings-btn:hover {
+  background-color: rgba(0, 0, 0, 0.6);
+  opacity: 1;
+}
+
+.settings-btn.hidden {
+    opacity: 0;
+    pointer-events: none; /* Make it non-interactive when hidden */
+}
+
+/* Settings Screen Specific */
+.settings-panel .screen-content {
+    width: 600px; /* Wider settings */
+    max-height: 85vh; /* Limit height and allow scrolling */
+    overflow-y: auto;
+    text-align: left;
+    position: relative; /* For close button positioning */
+}
+.settings-panel h2 {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.close-button {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    font-size: 2em;
+    color: #aaa;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 5px;
+    transition: color 0.2s;
+}
+.close-button:hover {
+    color: #fff;
+}
+
+.settings-group {
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+.settings-group:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+.settings-group h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #aaccff;
+    font-size: 1.2em;
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    min-height: 30px; /* Ensure rows have height */
+}
+.setting-label {
+    flex-basis: 160px; /* Fixed width for labels */
+    flex-shrink: 0;
+    padding-right: 15px;
+    color: #ccc;
+}
+.setting-control {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+}
+.setting-control select,
+.setting-control input[type="text"],
+.setting-control input[type="range"] {
+    background-color: rgba(0,0,0,0.3);
+    border: 1px solid #555;
+    color: #eee;
+    padding: 5px 8px;
+    border-radius: 3px;
+    font-size: 1em;
+}
+.setting-control input[type="range"] {
+    flex-grow: 1; /* Allow slider to take space */
+    margin-right: 10px;
+    cursor: pointer;
+}
+.setting-control select {
+     cursor: pointer;
+     min-width: 120px;
+}
+.setting-control input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin-right: 10px;
+     cursor: pointer;
+}
+.setting-control .keybind-input {
+    width: 100px;
+    cursor: pointer;
+    text-align: center;
+    font-weight: bold;
+}
+.setting-control .keybind-input:focus {
+    border-color: #aaccff;
+    outline: none;
+    box-shadow: 0 0 5px rgba(100, 150, 255, 0.5);
+}
+
+.setting-control .setting-value-display {
+    margin-left: 5px;
+    min-width: 40px; /* Space for text like 100% */
+    text-align: right;
+    font-weight: bold;
+}
+.setting-note {
+    font-size: 0.9em;
+    color: #aaa;
+    margin-top: -10px;
+    margin-bottom: 15px;
+}
+
+.setting-control select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.checkbox-row .setting-control {
+    justify-content: flex-start; /* Align checkbox left */
+}
+.checkbox-label {
+    flex-basis: auto; /* Allow label to take remaining space */
+}
+
+/* --- Mobile Controls --- */
+#mobileControls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 35%; /* Area for controls */
+    z-index: 15;
+    pointer-events: none; /* Container doesn't block */
+    display: none; /* Hidden by default */
+}
+body.is-mobile #mobileControls {
+    display: block; /* Show on mobile */
+}
+body.is-mobile #crosshair {
+    /* Optionally make crosshair slightly larger on mobile */
+    /* width: 20px; height: 20px; */
+}
+
+.mobile-control-area {
+    position: absolute;
+    bottom: 20px; /* Padding from bottom */
+    width: 130px; /* Size of the touch area */
+    height: 130px;
+    /* background-color: rgba(255,0,0,0.1); */ /* Debug visual */
+    pointer-events: auto; /* Allow interaction */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Joystick */
+#joystick {
+    left: 20px; /* Padding from left */
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 50%;
+}
+#joystick.active {
+    background-color: rgba(0, 0, 0, 0.3);
+}
+#joystickKnob {
+    width: 55px;
+    height: 55px;
+    background-color: rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.8);
+    position: absolute; /* Positioned relative to joystick base */
+    transition: transform 0.05s linear; /* Smooth knob movement */
+}
+
+/* Shoot Button Area */
+.shoot-area {
+    right: 20px; /* Padding from right */
+}
+#shootButton {
+    width: 100px;
+    height: 100px;
+    background-color: rgba(200, 50, 50, 0.6);
+    border: 2px solid rgba(255, 100, 100, 0.8);
+    color: white;
+    font-size: 1.2em;
+    font-weight: bold;
+    border-radius: 50%;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background-color 0.1s ease-out, transform 0.1s ease-out;
+    touch-action: manipulation;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+#shootButton.active {
+    background-color: rgba(220, 60, 60, 0.8);
+    transform: scale(0.95);
+}
+
+/* Damage Flash Animation */
+@keyframes damageFlash {
+    0% { background-color: transparent; }
+    25% { background-color: rgba(255, 0, 0, 0.3); } /* Red flash */
+    100% { background-color: transparent; }
+}
+body.damage-flash-active { /* Apply class via JS for flash */
+    animation: damageFlash 0.3s ease-out;
+  }
