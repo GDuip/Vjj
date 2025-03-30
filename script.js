@@ -1,3 +1,4 @@
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -15,7 +16,7 @@ if (isMobile) {
 // ============================================================================
 const GameSettings = {
     settings: {
-        language: 'ko', // Default language
+        language: 'en', // Default language (changed to match initial HTML option)
         forwardKey: 'KeyW',
         backwardKey: 'KeyS',
         leftKey: 'KeyA',
@@ -55,6 +56,8 @@ const GameSettings = {
                 console.error("Failed to parse saved settings:", e);
                 localStorage.removeItem('fpsGameSettings'); // Remove corrupted data
             }
+        } else {
+            console.log("No saved settings found, using defaults.");
         }
         // Update UI elements to reflect loaded settings *values*
         this.updateUIFromSettings();
@@ -75,7 +78,7 @@ const GameSettings = {
 
         try {
             localStorage.setItem('fpsGameSettings', JSON.stringify(this.settings));
-            // console.log("Saved settings:", this.settings);
+            console.log("Saved settings:", this.settings);
             this.applySettings(); // Apply settings immediately after saving/changing
         } catch (e) {
             console.error("Failed to save settings:", e);
@@ -84,11 +87,12 @@ const GameSettings = {
 
     applySettings() {
         // Apply settings to relevant modules (check if modules exist first)
-        if (AudioManager.setMusicVolume) AudioManager.setMusicVolume(this.settings.musicVolume);
-        if (AudioManager.setSfxVolume) AudioManager.setSfxVolume(this.settings.sfxVolume);
-        if (AudioManager.setReverb) AudioManager.setReverb(this.settings.useSpatialReverb, this.settings.reverbQuality);
-        if (InputManager.setTouchSensitivity) InputManager.setTouchSensitivity(this.settings.touchSensitivity);
-        if (InputManager.updateKeyBindings) InputManager.updateKeyBindings(); // Tell InputManager to re-read key bindings
+        // Check if modules and their methods exist before calling
+        if (typeof AudioManager !== 'undefined' && AudioManager.setMusicVolume) AudioManager.setMusicVolume(this.settings.musicVolume);
+        if (typeof AudioManager !== 'undefined' && AudioManager.setSfxVolume) AudioManager.setSfxVolume(this.settings.sfxVolume);
+        if (typeof AudioManager !== 'undefined' && AudioManager.setReverb) AudioManager.setReverb(this.settings.useSpatialReverb, this.settings.reverbQuality);
+        if (typeof InputManager !== 'undefined' && InputManager.setTouchSensitivity) InputManager.setTouchSensitivity(this.settings.touchSensitivity);
+        if (typeof InputManager !== 'undefined' && InputManager.updateKeyBindings) InputManager.updateKeyBindings(); // Tell InputManager to re-read key bindings
 
         // Language change might require a UI refresh or re-init of localization library
         // For now, just log the change
@@ -97,6 +101,7 @@ const GameSettings = {
         // e.g., Localization.setLanguage(this.settings.language);
 
         // Update UI elements that might not trigger change events automatically
+        // This is crucial after loading settings or manual application
         this.updateUIFromSettings();
         console.log("Applied settings:", this.settings);
     },
@@ -116,39 +121,47 @@ const GameSettings = {
         if (rightKeyInput) rightKeyInput.value = this.settings.rightKey;
 
         const touchSensitivitySlider = document.getElementById('touchSensitivity');
-        if (touchSensitivitySlider) touchSensitivitySlider.value = this.settings.touchSensitivity;
         const touchSensitivityValue = document.getElementById('touchSensitivityValue');
+        if (touchSensitivitySlider) touchSensitivitySlider.value = this.settings.touchSensitivity;
         if(touchSensitivityValue) touchSensitivityValue.textContent = parseFloat(this.settings.touchSensitivity).toFixed(1);
 
 
         const musicVolSlider = document.getElementById('musicVolume');
-        if (musicVolSlider) musicVolSlider.value = this.settings.musicVolume;
         const musicVolumeValue = document.getElementById('musicVolumeValue');
-        if(musicVolumeValue) musicVolumeValue.textContent = Math.round(this.settings.musicVolume * 100);
+        if (musicVolSlider) musicVolSlider.value = this.settings.musicVolume;
+        if(musicVolumeValue) musicVolumeValue.textContent = Math.round(this.settings.musicVolume * 100) + '%';
 
 
         const sfxVolSlider = document.getElementById('sfxVolume');
-        if (sfxVolSlider) sfxVolSlider.value = this.settings.sfxVolume;
         const sfxVolumeValue = document.getElementById('sfxVolumeValue');
-        if(sfxVolumeValue) sfxVolumeValue.textContent = Math.round(this.settings.sfxVolume * 100);
+        if (sfxVolSlider) sfxVolSlider.value = this.settings.sfxVolume;
+        if(sfxVolumeValue) sfxVolumeValue.textContent = Math.round(this.settings.sfxVolume * 100) + '%';
 
 
         const reverbCheckbox = document.getElementById('spatialReverb');
         if (reverbCheckbox) reverbCheckbox.checked = this.settings.useSpatialReverb;
 
         const reverbQualitySelect = document.getElementById('reverbQuality');
-        if (reverbQualitySelect) reverbQualitySelect.value = this.settings.reverbQuality;
-
-        // Disable reverb quality if reverb is off
-        if(reverbQualitySelect && reverbCheckbox) {
-            reverbQualitySelect.disabled = !reverbCheckbox.checked;
+        if (reverbQualitySelect) {
+            reverbQualitySelect.value = this.settings.reverbQuality;
+            // Disable reverb quality if reverb is off OR if corresponding IR failed to load (handled in AudioManager.setReverb)
+            reverbQualitySelect.disabled = !(reverbCheckbox?.checked ?? false);
         }
     },
 
     bindControlEvents() {
         // Add change/input listeners to all settings controls to save immediately
         document.querySelectorAll('#settingsScreen select, #settingsScreen input[type="checkbox"], #settingsScreen input[type="radio"]').forEach(element => {
-             element.addEventListener('change', () => this.saveSettings());
+             element.addEventListener('change', () => {
+                this.saveSettings();
+                // Special case: enable/disable reverb quality select when checkbox changes
+                if (element.id === 'spatialReverb') {
+                     const reverbQualitySelect = document.getElementById('reverbQuality');
+                     if (reverbQualitySelect) {
+                         reverbQualitySelect.disabled = !element.checked;
+                     }
+                }
+             });
          });
         // Use 'input' for sliders for real-time feedback saving
          document.querySelectorAll('#settingsScreen input[type="range"]').forEach(element => {
@@ -160,22 +173,40 @@ const GameSettings = {
                      if(element.id === 'touchSensitivity') {
                          valueDisplay.textContent = parseFloat(element.value).toFixed(1);
                      } else {
-                          valueDisplay.textContent = Math.round(element.value * 100);
+                          valueDisplay.textContent = Math.round(element.value * 100) + '%';
                      }
                   }
              });
          });
 
-         // Special handling for key binding inputs (update on blur or Enter key?)
+         // Special handling for key binding inputs
          document.querySelectorAll('#settingsScreen input.keybind-input').forEach(input => {
+            input.addEventListener('focus', () => { input.value = 'Press key...'; });
+            input.addEventListener('blur', () => {
+                // Restore previous value if nothing was pressed or if still 'Press key...'
+                 if(input.value === 'Press key...') {
+                     const settingKey = input.id.replace('KeyInput', 'Key'); // e.g., forwardKey
+                     input.value = this.settings[settingKey] || '???';
+                 }
+                 // Save settings on blur just in case
+                 this.saveSettings();
+             });
+
             input.addEventListener('keydown', (e) => {
-                 e.preventDefault(); // Prevent typing the key character itself
+                 e.preventDefault(); // Prevent typing the key character itself / default actions
+                 if(e.code === 'Escape') { // Allow Escape to cancel binding
+                     input.blur(); // Lose focus, blur handler will restore previous value
+                     return;
+                 }
+                 if(e.code === 'Backspace' || e.code === 'Delete') { // Clear binding (optional)
+                      // input.value = ''; // Or set to a default? Maybe disallow?
+                      // For now, just ignore clear keys
+                      return;
+                 }
                  input.value = e.code; // Display the code (e.g., "KeyW", "ArrowUp")
-                this.saveSettings(); // Save immediately on key press display
-                 input.blur(); // Optional: lose focus after setting
+                 this.saveSettings(); // Save immediately on key press display
+                 input.blur(); // Lose focus after setting
             });
-            // Fallback in case keydown doesn't register weird keys
-             input.addEventListener('blur', () => this.saveSettings());
         });
 
         console.log("Settings controls bound.");
@@ -193,6 +224,7 @@ const AudioManager = {
     listener: null,
     loadedSounds: {},
     loadedReverbs: {},
+    reverbLoadStatus: {}, // Track loading success/failure per quality
     currentReverbNode: null,
     reverbEnabled: true,
     reverbQuality: 'medium',
@@ -224,20 +256,30 @@ const AudioManager = {
             try {
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 // Resume context on user gesture if needed (often required by browsers)
-                const resumeContext = () => {
+                const resumeContext = async () => { // Make async
                     if (this.audioContext.state === 'suspended') {
-                        this.audioContext.resume().then(() => {
-                            console.log("AudioContext Resumed");
-                            document.removeEventListener('click', resumeContext);
-                            document.removeEventListener('touchstart', resumeContext);
-                        });
+                         try {
+                            await this.audioContext.resume();
+                             console.log("AudioContext Resumed");
+                             // Remove listeners once resumed successfully
+                             document.removeEventListener('click', resumeContext, true);
+                             document.removeEventListener('touchstart', resumeContext, true);
+                             document.removeEventListener('keydown', resumeContext, true);
+                         } catch (err) {
+                             console.error("Failed to resume AudioContext:", err);
+                             // Keep listeners active if resume fails
+                         }
                     } else {
-                        document.removeEventListener('click', resumeContext);
-                        document.removeEventListener('touchstart', resumeContext);
+                        // Context already running, remove listeners
+                         document.removeEventListener('click', resumeContext, true);
+                         document.removeEventListener('touchstart', resumeContext, true);
+                         document.removeEventListener('keydown', resumeContext, true);
                     }
                 };
-                document.addEventListener('click', resumeContext);
-                document.addEventListener('touchstart', resumeContext);
+                 // Use capturing phase to catch gestures early
+                 document.addEventListener('click', resumeContext, true);
+                 document.addEventListener('touchstart', resumeContext, true);
+                 document.addEventListener('keydown', resumeContext, true);
 
 
                 this.listener = new THREE.AudioListener(); // Use THREE's listener
@@ -262,7 +304,7 @@ const AudioManager = {
             } catch (e) {
                 console.error("Web Audio API not supported or context creation failed.", e);
                 this.audioContext = null;
-                reject("Audio initialization failed");
+                reject("Audio initialization failed: Web Audio API not supported.");
             }
         });
     },
@@ -276,24 +318,35 @@ const AudioManager = {
         // Load regular sounds
         for (const key in this.soundsToLoad) {
             const path = this.soundsToLoad[key];
-            const promise = new Promise((resolve, reject) => {
+            const promise = new Promise((resolve) => { // Resolve always
                 loader.load(path,
                     (buffer) => { this.loadedSounds[key] = buffer; /*console.log(`Sound loaded: ${key}`);*/ resolve(); },
                     undefined, // Progress
-                    (err) => { console.error(`Failed to load sound ${key} from ${path}:`, err); resolve(); /* Resolve anyway? Or reject? */ }
+                    (err) => { console.error(`Failed to load sound ${key} from ${path}:`, err); resolve(); /* Resolve anyway */ }
                 );
             });
             loadPromises.push(promise);
         }
 
         // Load reverb impulse responses
+         this.reverbLoadStatus = {}; // Reset status
         for (const key in this.reverbsToLoad) {
             const path = this.reverbsToLoad[key];
-            const promise = new Promise((resolve, reject) => {
+            const promise = new Promise((resolve) => { // Resolve always
+                 this.reverbLoadStatus[key] = 'loading';
                 loader.load(path,
-                    (buffer) => { this.loadedReverbs[key] = buffer; /*console.log(`Reverb loaded: ${key}`);*/ resolve(); },
+                    (buffer) => {
+                        this.loadedReverbs[key] = buffer;
+                        this.reverbLoadStatus[key] = 'loaded';
+                        // console.log(`Reverb loaded: ${key}`);
+                        resolve();
+                    },
                     undefined,
-                    (err) => { console.error(`Failed to load reverb IR ${key} from ${path}:`, err); resolve(); /* Resolve anyway */ }
+                    (err) => {
+                        console.error(`Failed to load reverb IR ${key} from ${path}:`, err);
+                         this.reverbLoadStatus[key] = 'failed';
+                        resolve(); /* Resolve anyway */
+                    }
                 );
             });
             loadPromises.push(promise);
@@ -303,8 +356,13 @@ const AudioManager = {
     },
 
     playSound(soundKey, position = null, volume = 1.0, playbackRate = 1.0, loop = false) {
-        if (!this.audioContext || this.audioContext.state === 'suspended' || !this.loadedSounds[soundKey] || !this.sfxGainNode) {
-            // console.warn(`SFX Not ready or context suspended: ${soundKey}`);
+        if (!this.audioContext || this.audioContext.state !== 'running' || !this.loadedSounds[soundKey] || !this.sfxGainNode) {
+             if(this.audioContext && this.audioContext.state === 'suspended') {
+                 console.warn(`SFX skipped (context suspended): ${soundKey}. Trying resume...`);
+                 this.audioContext.resume().catch(e => console.error("Resume failed:", e)); // Attempt resume on play
+             } else if (!this.loadedSounds[soundKey]) {
+                 // console.warn(`SFX sound not loaded: ${soundKey}`);
+             }
             return null;
         }
 
@@ -322,43 +380,50 @@ const AudioManager = {
         soundNodeChain.connect(individualGain);
         soundNodeChain = individualGain; // Update end of chain
 
-        // Spatialization + Reverb Send
-        if (position && this.listener && typeof position.x === 'number') { // Check if position is valid
-            const panner = this.audioContext.createPanner();
-            panner.panningModel = 'HRTF';
-            panner.distanceModel = 'inverse';
-            panner.refDistance = 1;
-            panner.maxDistance = 100; // Adjust max distance
-            panner.rolloffFactor = 1;
-            panner.coneInnerAngle = 360; // Omni-directional for now
-            panner.coneOuterAngle = 0;
-            panner.coneOuterGain = 0;
-            // Set position using the correct methods
-            if(panner.positionX) {
-                 panner.positionX.setValueAtTime(position.x, this.audioContext.currentTime);
-                 panner.positionY.setValueAtTime(position.y, this.audioContext.currentTime);
-                 panner.positionZ.setValueAtTime(position.z, this.audioContext.currentTime);
-            } else { // Fallback for older implementations
-                 panner.setPosition(position.x, position.y, position.z);
-            }
+         // Spatialization + Reverb Send
+         let panner = null; // Declare panner here
+         let reverbSendGain = null; // Declare send gain here
 
+        if (position && this.listener && typeof position.x === 'number' && typeof THREE !== 'undefined') { // Check if position is valid and THREE exists
+             panner = this.audioContext.createPanner();
+             panner.panningModel = 'HRTF';
+             panner.distanceModel = 'inverse';
+             panner.refDistance = 1;
+             panner.maxDistance = 100; // Adjust max distance
+             panner.rolloffFactor = 1;
+             panner.coneInnerAngle = 360; // Omni-directional for now
+             panner.coneOuterAngle = 0;
+             panner.coneOuterGain = 0;
+             // Set position using the correct methods
+             if(panner.positionX) {
+                  panner.positionX.setValueAtTime(position.x, this.audioContext.currentTime);
+                  panner.positionY.setValueAtTime(position.y, this.audioContext.currentTime);
+                  panner.positionZ.setValueAtTime(position.z, this.audioContext.currentTime);
+             } else { // Fallback for older implementations
+                  panner.setPosition(position.x, position.y, position.z);
+             }
+             // Panner orientation will automatically follow the listener's orientation
 
             soundNodeChain.connect(panner); // Connect gain to panner
             soundNodeChain = panner; // Panner is now end of the main chain for direct sound
 
             // Reverb Path (if enabled and IR loaded for current quality)
-            if (this.reverbEnabled && this.currentReverbNode && this.loadedReverbs[this.reverbQuality]) {
-                const reverbSendGain = this.audioContext.createGain();
+            if (this.reverbEnabled && this.currentReverbNode && this.reverbLoadStatus[this.reverbQuality] === 'loaded') {
+                reverbSendGain = this.audioContext.createGain();
                 // Adjust reverb send level (e.g., less than direct path volume)
-                reverbSendGain.gain.setValueAtTime(volume * 0.35, this.audioContext.currentTime); // Example: 35% send
+                // Make reverb quieter for sounds further away? More complex. Simple fixed send for now.
+                 reverbSendGain.gain.setValueAtTime(volume * 0.35, this.audioContext.currentTime); // Example: 35% send
 
                 // Send signal FROM the panner TO the reverb send gain
                 panner.connect(reverbSendGain);
                 reverbSendGain.connect(this.currentReverbNode);
 
                 // Connect the Reverb Node's output TO the main SFX gain node
-                this.currentReverbNode.connect(this.sfxGainNode);
-                // Note: The direct sound (from panner) also connects to sfxGainNode below
+                // IMPORTANT: Connect only ONCE for the reverb node instance, not per sound!
+                // This connection should ideally be made in setReverb. Let's adjust setReverb.
+                // For now, assume connection exists if currentReverbNode is valid.
+                // this.currentReverbNode.connect(this.sfxGainNode); // MOVED TO setReverb
+
             }
              // Connect the main sound chain (ending with panner) to the SFX gain node
              soundNodeChain.connect(this.sfxGainNode);
@@ -372,12 +437,16 @@ const AudioManager = {
         this.activeSoundSources.add(source);
         source.onended = () => {
             this.activeSoundSources.delete(source);
-             // Disconnect nodes explicitly to help garbage collection? (Might not be necessary)
-             // source.disconnect();
-             // individualGain.disconnect();
-             // if(panner) panner.disconnect();
-             // if(reverbSendGain) reverbSendGain.disconnect();
-             // No need to disconnect currentReverbNode here, it's persistent
+             // Explicitly disconnect nodes for this specific sound instance
+             // This helps prevent potential memory leaks with complex graphs
+             try {
+                 source.disconnect();
+                 individualGain.disconnect();
+                 if(panner) panner.disconnect(); // Disconnect panner from sfxGain and reverbSendGain
+                 if(reverbSendGain) reverbSendGain.disconnect(); // Disconnect send gain from reverbNode
+             } catch (e) {
+                 // console.warn("Error disconnecting nodes on sound end:", e);
+             }
         };
 
 
@@ -386,15 +455,18 @@ const AudioManager = {
     },
 
     playBGM() {
-        if (!this.audioContext || this.audioContext.state === 'suspended' || !this.loadedSounds['bgm'] || !this.musicGainNode) {
-           console.warn("BGM Not ready or context suspended.");
-            return;
-        }
+         if (!this.audioContext || this.audioContext.state !== 'running' || !this.loadedSounds['bgm'] || !this.musicGainNode) {
+            console.warn("BGM Not ready or context not running.");
+            if(this.audioContext && this.audioContext.state === 'suspended') {
+                 this.audioContext.resume().catch(e => console.error("Resume failed:", e));
+             }
+             return;
+         }
         if (this.bgmSource) {
             try {
                 this.bgmSource.stop();
+                this.bgmSource.disconnect(); // Disconnect previous source
             } catch (e) { /* Ignore error if already stopped */ }
-            this.bgmSource.disconnect(); // Disconnect previous source
         }
 
         this.bgmSource = this.audioContext.createBufferSource();
@@ -424,8 +496,8 @@ const AudioManager = {
         this.activeSoundSources.forEach(source => {
              try {
                  source.stop(0); // Stop immediately
+                 source.disconnect(); // Disconnect to be sure
              } catch (e) { /* Ignore errors if already stopped */ }
-            source.disconnect(); // Disconnect to be sure
         });
         this.activeSoundSources.clear(); // Clear the tracking set
         console.log("All active sounds stopped.");
@@ -435,14 +507,15 @@ const AudioManager = {
     // --- Volume Controls ---
     setMusicVolume(volume) {
         if (this.musicGainNode && this.audioContext) {
-            this.musicGainNode.gain.setTargetAtTime(clamp(volume, 0, 1), this.audioContext.currentTime, 0.05); // Smooth ramp
+            // Use exponential ramp for perceived loudness change
+            this.musicGainNode.gain.setTargetAtTime(clamp(volume, 0.0001, 1), this.audioContext.currentTime, 0.05); // Avoid 0 for exponential ramp
             // console.log("Music Volume Set:", volume);
         }
     },
 
     setSfxVolume(volume) {
         if (this.sfxGainNode && this.audioContext) {
-            this.sfxGainNode.gain.setTargetAtTime(clamp(volume, 0, 1), this.audioContext.currentTime, 0.05); // Smooth ramp
+            this.sfxGainNode.gain.setTargetAtTime(clamp(volume, 0.0001, 1), this.audioContext.currentTime, 0.05); // Avoid 0
             // console.log("SFX Volume Set:", volume);
         }
     },
@@ -454,50 +527,69 @@ const AudioManager = {
 
         if (!this.audioContext) return;
 
+        const reverbQualitySelect = document.getElementById('reverbQuality');
+        const reverbCheckbox = document.getElementById('spatialReverb');
+
         // Disconnect the old reverb node cleanly FROM its destination (sfxGainNode)
         if (this.currentReverbNode) {
             try {
                  this.currentReverbNode.disconnect(this.sfxGainNode);
+                 console.log("Disconnected previous reverb node output.");
             } catch(e) { /* Ignore if not connected */ }
-            console.log("Disconnected previous reverb node output.");
         }
 
-        // Create and connect the new one if enabled and the IR buffer exists
-        if (enabled && this.loadedReverbs[quality]) {
+        // Check if the desired reverb quality actually loaded successfully
+        const isReverbLoaded = this.reverbLoadStatus[quality] === 'loaded';
+
+        // Create and connect the new one if enabled AND the IR buffer exists and loaded
+        if (enabled && isReverbLoaded) {
             if (!this.currentReverbNode || this.currentReverbNode.buffer !== this.loadedReverbs[quality]) {
                 // Create new convolver only if it doesn't exist or quality changed
                 this.currentReverbNode = this.audioContext.createConvolver();
                 this.currentReverbNode.buffer = this.loadedReverbs[quality];
                 console.log(`Reverb Enabled: Created/Set Convolver Quality - ${quality}`);
             }
-            // Connection happens dynamically in playSound (reverbSend -> convolver -> sfxGain)
+            // Connect the convolver output TO the main SFX gain node (persistent connection)
+            try {
+                this.currentReverbNode.connect(this.sfxGainNode);
+                console.log(`Reverb node (${quality}) output connected to SFX Gain.`);
+            } catch (e) {
+                console.error("Error connecting reverb node:", e);
+                this.currentReverbNode = null; // Invalidate if connection fails
+            }
         } else {
-            // Reverb disabled or IR not loaded
-            if (!this.loadedReverbs[quality]) {
-                 console.warn(`Reverb IR for quality "${quality}" not loaded. Disabling reverb.`);
-                 this.reverbEnabled = false; // Force disable if IR is missing
-                 // Optionally update UI to reflect this forced state
-                const reverbCheckbox = document.getElementById('spatialReverb');
-                const reverbQualitySelect = document.getElementById('reverbQuality');
+            // Reverb disabled by user OR IR failed to load
+             this.currentReverbNode = null; // Ensure no reverb node is active/connected
+
+            if (enabled && !isReverbLoaded) { // User wanted reverb, but it failed to load
+                 console.warn(`Reverb IR for quality "${quality}" not loaded or failed to load. Reverb disabled.`);
+                 this.reverbEnabled = false; // Force disable internal state
+                 // Update UI to reflect this forced state
                  if (reverbCheckbox) reverbCheckbox.checked = false;
-                 if (reverbQualitySelect) reverbQualitySelect.disabled = true; // Disable quality select if IR missing?
-            } else {
+                 if (reverbQualitySelect) reverbQualitySelect.disabled = true;
+            } else { // Reverb disabled via settings normally
                  console.log("Reverb Disabled via settings.");
             }
-            // We don't nullify currentReverbNode here, just don't connect to it in playSound
-             // Keep the node object around in case it's re-enabled later.
         }
 
-        // Update UI reverb quality dropdown enabled state based on checkbox
-        const reverbCheckbox = document.getElementById('spatialReverb');
-        const reverbQualitySelect = document.getElementById('reverbQuality');
+        // Update UI reverb quality dropdown enabled state based on the CHECKBOX state
         if(reverbQualitySelect && reverbCheckbox) {
-            reverbQualitySelect.disabled = !reverbCheckbox.checked || !this.reverbEnabled;
+             // Only enable quality select if checkbox is checked AND the currently selected quality is actually loaded
+             // Re-evaluate based on the potentially forced disabled state above
+            reverbQualitySelect.disabled = !this.reverbEnabled || !reverbCheckbox.checked;
         }
     },
 
     getListener() {
-       return this.listener;
+       // Ensure THREE is loaded before accessing its properties
+       if (typeof THREE !== 'undefined') {
+           if (!this.listener) {
+               this.listener = new THREE.AudioListener();
+           }
+           return this.listener;
+       }
+       console.warn("THREE is not defined, cannot get AudioListener.");
+       return null;
    }
 };
 
@@ -517,6 +609,12 @@ const Graphics = {
     cameraYawObject: null,   // Rotates horizontally (Y-axis) - THIS WILL BE THE PLAYER MESH/PHYSICS OBJECT
 
     init() {
+         // Ensure THREE is loaded
+         if (typeof THREE === 'undefined') {
+            console.error("THREE.js is not loaded! Graphics initialization failed.");
+            return false;
+         }
+
         this.container = document.getElementById('gameCanvas');
         if (!this.container) {
             console.error("Canvas container ('gameCanvas') not found!");
@@ -525,23 +623,43 @@ const Graphics = {
 
         // Scene
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x33334d);
-        this.scene.fog = new THREE.Fog(0x33334d, 50, 150);
+        this.scene.background = new THREE.Color(0x33334d); // Dark blue/grey sky
+        this.scene.fog = new THREE.Fog(0x33334d, 30, 120); // Start fog closer, end sooner
 
         // Camera (Perspective)
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000); // Slightly less FOV
         this.cameraPitchObject = new THREE.Object3D(); // Controls pitch
         this.cameraPitchObject.add(this.camera);
         // cameraYawObject (player's body/mesh) is set later in attachCameraToPlayer
         this.camera.position.set(0, 0, 0); // Position relative to pitch object
 
         // Renderer
-        this.renderer = new THREE.WebGLRenderer({ canvas: this.container, antialias: true, alpha: false }); // Ensure alpha is false unless needed
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        this.renderer.outputEncoding = THREE.sRGBEncoding; // Correct color space
+        try {
+            this.renderer = new THREE.WebGLRenderer({ canvas: this.container, antialias: true, alpha: false });
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            this.renderer.setPixelRatio(window.devicePixelRatio);
+            this.renderer.shadowMap.enabled = true;
+            this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+             // Use sRGBEncoding for output for better color representation
+             // Note: THREE.sRGBEncoding is deprecated in newer versions, use ColorManagement instead if updating THREE.js
+             // For r99:
+             // this.renderer.gammaOutput = true;
+             // this.renderer.gammaFactor = 2.2;
+             // For newer THREE:
+             this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+
+             // Tone mapping for more realistic lighting
+             this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+             this.renderer.toneMappingExposure = 1.0;
+
+
+        } catch (e) {
+             console.error("Failed to create WebGLRenderer:", e);
+             // Provide feedback to user?
+             document.body.innerHTML = `<div style="color: white; padding: 30px; text-align: center;"><h1>WebGL Error</h1><p>Could not initialize WebGL.</p><p>Your browser or graphics card may not support it.</p></div>`;
+             return false;
+        }
 
         // Clock
         this.clock = new THREE.Clock();
@@ -566,29 +684,33 @@ const Graphics = {
     },
 
     setupLighting() {
-        // Ambient Light
-        const ambientLight = new THREE.AmbientLight(0xcccccc, 0.6); // Softer ambient
+        // Ambient Light (Lower intensity, complements directional light)
+        const ambientLight = new THREE.AmbientLight(0x607080, 0.4); // Cool ambient
         this.scene.add(ambientLight);
 
         // Directional Light (Sun)
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Slightly less intense sun
-        directionalLight.position.set(20, 30, 25); // Angled position
+        const directionalLight = new THREE.DirectionalLight(0xffeedd, 1.0); // Warmer sun color, slightly higher intensity due to tone mapping
+        directionalLight.position.set(30, 50, 40); // Angled position
         directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.width = 2048; // Good shadow resolution
         directionalLight.shadow.mapSize.height = 2048;
-        directionalLight.shadow.camera.near = 0.5;
-        directionalLight.shadow.camera.far = 100; // Adjusted shadow camera range
-        directionalLight.shadow.camera.left = -40; // Wider shadow area
-        directionalLight.shadow.camera.right = 40;
-        directionalLight.shadow.camera.top = 40;
-        directionalLight.shadow.camera.bottom = -40;
+        // Adjust shadow camera bounds to fit the expected play area
+        directionalLight.shadow.camera.near = 1;
+        directionalLight.shadow.camera.far = 150;
+        directionalLight.shadow.camera.left = -50; // Wider shadow area if needed
+        directionalLight.shadow.camera.right = 50;
+        directionalLight.shadow.camera.top = 50;
+        directionalLight.shadow.camera.bottom = -50;
         directionalLight.shadow.bias = -0.002; // Adjust bias carefully if shadow acne occurs
+        directionalLight.shadow.radius = 1.5; // Soften shadow edges slightly (PCFSoft specific)
         this.scene.add(directionalLight);
-        this.scene.add(directionalLight.target); // Target defaults to (0,0,0), can be moved if needed
+        // Optional: Add a target object if the light needs to point somewhere other than origin
+        // directionalLight.target.position.set(0, 0, 0);
+        // this.scene.add(directionalLight.target);
 
-        // Hemisphere Light (Optional, for softer ground/sky lighting)
-        // const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a4a4a, 0.4); // Sky blue, ground gray, less intense
-        // this.scene.add(hemiLight);
+        // Hemisphere Light (Subtle sky/ground bounce light)
+        const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a4a4a, 0.5); // Sky blue, ground gray, moderate intensity
+        this.scene.add(hemiLight);
     },
 
     // Call this AFTER Physics player body & MESH are created
@@ -604,38 +726,44 @@ const Graphics = {
         this.cameraYawObject = playerMesh; // Yaw is controlled by the mesh linked to the physics body
         // Position the pitch object at eye level *within* the player mesh's local space
         this.cameraPitchObject.position.set(0, this.cameraBaseY, 0);
+        // Make sure the pitch object isn't already parented elsewhere
+         if(this.cameraPitchObject.parent) this.cameraPitchObject.parent.remove(this.cameraPitchObject);
         this.cameraYawObject.add(this.cameraPitchObject); // Add pitch control to the player mesh
         console.log("Camera attached to player object.");
     },
 
     updateCameraRotation(targetYaw, targetPitch) {
-        // Note: Yaw rotation is now primarily handled by the PHYSICS body's rotation.
-        // This function mainly handles the visual PITCH rotation.
-        // We might still visually lerp the YawObject's rotation for smoothness if needed,
-        // but the authoritative rotation comes from Physics.syncMeshes().
+        // Yaw rotation is handled by Physics sync (Physics.syncMeshes copies body quaternion to mesh)
+        // This function only handles the visual PITCH rotation on the cameraPitchObject.
 
         if (!this.cameraPitchObject) return;
 
-        const lerpFactor = 0.25; // Smoothing factor for visual pitch
+        // We directly set the pitch based on the input manager's target pitch.
+        // Smoothing (lerp) is now less critical here as the physics body rotation handles yaw smoothing.
+        // If pitch feels too snappy, lerping can be re-added.
+        const lerpFactor = 1.0; // Use 1.0 for direct control, < 1.0 for smoothing
 
-        // Apply Pitch to the Pitch Object (visual only)
-        this.cameraPitchObject.rotation.x = lerp(this.cameraPitchObject.rotation.x, targetPitch, lerpFactor);
-        // Clamp pitch immediately after lerping
-        this.cameraPitchObject.rotation.x = clamp(this.cameraPitchObject.rotation.x, -Math.PI / 2 + 0.1, Math.PI / 2 - 0.1);
+        // Clamp the target pitch *before* applying it (prevents over-rotation)
+         const clampedPitch = clamp(targetPitch, -Math.PI / 2 + 0.05, Math.PI / 2 - 0.05); // Slightly smaller clamp
 
+        // Apply Pitch to the Pitch Object
+        this.cameraPitchObject.rotation.x = lerp(this.cameraPitchObject.rotation.x, clampedPitch, lerpFactor);
 
-        // --- Physics Body Yaw Update (handled in Physics.applyPlayerMovement and syncMeshes) ---
-        // The InputManager provides targetYaw, Physics module uses it to apply torque or slerp the body's quaternion.
-        // Graphics.cameraYawObject (the player mesh) will copy the body's quaternion in Physics.syncMeshes.
+        // The listener's orientation is automatically updated as it's a child of the camera/pitch object
     },
 
 
     render(deltaTime) {
-        if (!this.renderer || !this.scene || !this.camera) return;
+        if (!this.renderer || !this.scene || !this.camera || typeof InputManager === 'undefined') return;
 
         // Update camera's visual pitch based on InputManager's target
         // (Yaw is updated by physics sync)
         this.updateCameraRotation(InputManager.targetYaw, InputManager.targetPitch);
+
+        // Update the Audio Listener's position/orientation (handled automatically by THREE if added to camera)
+        // However, ensure the listener's matrix world is up to date if needed elsewhere, though usually not required.
+        // if (AudioManager.listener) AudioManager.listener.updateMatrixWorld();
+
 
         this.renderer.render(this.scene, this.camera);
     },
@@ -645,37 +773,46 @@ const Graphics = {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+         // Consider updating shadow camera bounds if aspect ratio changes drastically? Usually not needed.
     },
 
     addObject(object) {
-        if (object) {
+        if (object && object instanceof THREE.Object3D) {
             this.scene.add(object);
+        } else {
+             // console.warn("Attempted to add invalid object to scene:", object);
         }
     },
 
     removeObject(object) {
-        if (!object) return;
+        if (!object || !(object instanceof THREE.Object3D)) return;
 
         // Recursively dispose of materials and geometries
         object.traverse((child) => {
             if (child.isMesh) {
                 if (child.geometry) {
                     child.geometry.dispose();
+                     // console.log("Disposed geometry");
                 }
                 if (child.material) {
-                    if (Array.isArray(child.material)) {
-                        child.material.forEach(m => {
-                            if (m.map) m.map.dispose(); // Dispose textures
-                            m.dispose();
-                        });
-                    } else {
-                        if (child.material.map) child.material.map.dispose();
-                        child.material.dispose();
-                    }
+                    // Handle arrays of materials
+                    const materials = Array.isArray(child.material) ? child.material : [child.material];
+                    materials.forEach(m => {
+                        // Dispose textures attached to the material
+                         for (const key in m) {
+                            if (m[key] instanceof THREE.Texture) {
+                                m[key].dispose();
+                                // console.log(`Disposed texture on material key: ${key}`);
+                            }
+                        }
+                        m.dispose();
+                        // console.log("Disposed material");
+                    });
                 }
             }
         });
         this.scene.remove(object);
+         // console.log("Removed object from scene:", object.name || object.uuid);
     }
 };
 
@@ -695,18 +832,29 @@ const Physics = {
         mesh: null, // Reference to the graphical mesh linked to the body
         shape: null,
         height: 1.7, // Adjusted height
-        radius: 0.4
+        radius: 0.4,
+        isOnGround: false, // Track ground contact
+        lastGroundContactTime: 0,
     },
-    // activeBodies: [], // Less necessary if using userData linking
+    fixedTimeStep: 1 / 60, // Standard physics step rate
+    maxSubSteps: 5, // Allow more substeps if needed for stability
 
     init() {
+         // Ensure Cannon-es is loaded
+         if (typeof CANNON === 'undefined') {
+             console.error("Cannon-es is not loaded! Physics initialization failed.");
+             return false;
+         }
+
         // Physics World
         this.world = new CANNON.World({
-            gravity: new CANNON.Vec3(0, -10, 0), // Standard gravity
-            // allowSleep: true // Enable sleeping for performance
+            gravity: new CANNON.Vec3(0, -10.5, 0), // Slightly stronger gravity
+             allowSleep: true // Enable sleeping for performance on inactive objects
         });
-        this.world.broadphase = new CANNON.SAPBroadphase(this.world);
-        this.world.solver.iterations = 12; // Increase solver iterations slightly
+         this.world.broadphase = new CANNON.SAPBroadphase(this.world); // Generally good performance
+         // this.world.broadphase = new CANNON.NaiveBroadphase(); // Simpler, ok for fewer objects
+         this.world.solver.iterations = 10; // 10-15 is usually a good balance
+         this.world.solver.tolerance = 0.01; // Default is 0.1
 
         // Initialize materials
         this.materials.default = new CANNON.Material("defaultMaterial");
@@ -720,10 +868,10 @@ const Physics = {
         this.createPlayerBody(); // Creates body AND mesh
 
         // IMPORTANT: Attach camera AFTER player mesh exists
-        if (this.player.mesh) {
+        if (this.player.mesh && typeof Graphics !== 'undefined' && Graphics.attachCameraToPlayer) {
              Graphics.attachCameraToPlayer(this.player.mesh);
         } else {
-            console.error("Player mesh not created, cannot attach camera!");
+            console.error("Player mesh not created or Graphics module not ready, cannot attach camera!");
         }
 
         console.log("Physics Initialized");
@@ -731,46 +879,44 @@ const Physics = {
     },
 
     setupContactMaterials() {
-        // Default contact properties (if materials not specifically defined below)
+        // Default contact properties (low friction, some restitution)
         const defaultContactMaterial = new CANNON.ContactMaterial(
              this.materials.default,
              this.materials.default,
              {
-                 friction: 0.4,
+                 friction: 0.3,
                  restitution: 0.2,
-                 // contactEquationStiffness: 1e8,
-                 // contactEquationRelaxation: 3
              }
          );
         this.world.addContactMaterial(defaultContactMaterial);
         this.world.defaultContactMaterial = defaultContactMaterial; // Set as default
 
 
-        // Player <-> Ground
+        // Player <-> Ground (Low friction for movement, low restitution to prevent bounce)
         const playerGroundContact = new CANNON.ContactMaterial(
             this.materials.player, this.materials.ground,
-            { friction: 0.3, restitution: 0.1 }
+            { friction: 0.2, restitution: 0.1 }
         );
         this.world.addContactMaterial(playerGroundContact);
 
-        // Target <-> Ground
+        // Target <-> Ground (Higher friction, moderate restitution)
         const targetGroundContact = new CANNON.ContactMaterial(
             this.materials.target, this.materials.ground,
             { friction: 0.6, restitution: 0.3 }
         );
         this.world.addContactMaterial(targetGroundContact);
 
-        // Target <-> Target
+        // Target <-> Target (Low friction, higher restitution for bouncing off each other)
         const targetTargetContact = new CANNON.ContactMaterial(
             this.materials.target, this.materials.target,
-            { friction: 0.2, restitution: 0.4 }
+            { friction: 0.2, restitution: 0.5 }
         );
         this.world.addContactMaterial(targetTargetContact);
 
-         // Player <-> Target (Example: Player bumping into targets)
+         // Player <-> Target (Player bumping into targets - very low friction/restitution)
          const playerTargetContact = new CANNON.ContactMaterial(
             this.materials.player, this.materials.target,
-            { friction: 0.1, restitution: 0.1 } // Low friction/restitution
+            { friction: 0.1, restitution: 0.1 }
         );
         this.world.addContactMaterial(playerTargetContact);
 
@@ -779,18 +925,25 @@ const Physics = {
     },
 
     createGroundPlane() {
+         if (typeof THREE === 'undefined') return; // Skip if THREE not loaded
         // Visual Ground
-        const groundGeometry = new THREE.PlaneGeometry(200, 200);
+        const groundGeometry = new THREE.PlaneGeometry(300, 300); // Larger ground
+        // Use a texture for better visuals (optional)
+        // const textureLoader = new THREE.TextureLoader();
+        // const groundTexture = textureLoader.load('assets/textures/ground.jpg'); // ** REPLACE PATH **
+        // groundTexture.wrapS = groundTexture.wrapT = THREE.RepeatWrapping;
+        // groundTexture.repeat.set(50, 50);
         const groundMaterial = new THREE.MeshStandardMaterial({
-            color: 0x777777, // Darker grey
+            color: 0x666666, // Mid-grey
             roughness: 0.9,
             metalness: 0.1,
-            // side: THREE.DoubleSide // Usually not needed for ground plane
+            // map: groundTexture // Uncomment if using texture
         });
         const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
         groundMesh.rotation.x = -Math.PI / 2; // Rotate flat
-        groundMesh.position.y = -0.01; // Slightly below 0 to avoid z-fighting if player starts exactly at y=0
-        groundMesh.receiveShadow = true;
+        groundMesh.position.y = 0; // Position exactly at 0
+        groundMesh.receiveShadow = true; // Ground should receive shadows
+         groundMesh.name = "GroundMesh";
         Graphics.addObject(groundMesh);
 
         // Physics Ground Plane
@@ -802,44 +955,72 @@ const Physics = {
         });
         // Rotate physics plane to match visual orientation
         groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+        groundBody.position.copy(groundMesh.position); // Ensure physics body matches visual y
+         groundBody.userData = { isGround: true }; // Add identifier
         this.world.addBody(groundBody);
         console.log("Ground plane created.");
     },
 
     createPlayerBody() {
-        // Player Physics Body (Using a Box shape for simplicity)
-        // A Capsule is better but requires Cannon-es compound shapes or custom implementation.
-        this.player.shape = new CANNON.Box(new CANNON.Vec3(this.player.radius, this.player.height / 2, this.player.radius));
+        if (typeof THREE === 'undefined' || typeof CANNON === 'undefined') return; // Skip if libs not loaded
+
+        // Player Physics Body (Using a Capsule shape is ideal for FPS controllers)
+        // Cannon-es doesn't have a native capsule, simulate with a Box or compound shape.
+        // Using a Box is simpler but less realistic for slopes/stairs.
+        // Let's stick with Box for now as per original code.
+        const boxHalfExtents = new CANNON.Vec3(this.player.radius, this.player.height / 2, this.player.radius);
+        this.player.shape = new CANNON.Box(boxHalfExtents);
+
+        // For a slightly better approximation, use a compound shape: Sphere + Box + Sphere (requires more setup)
+        // const sphereRadius = this.player.radius;
+        // const cylinderHeight = this.player.height - 2 * sphereRadius;
+        // this.player.shape = new CANNON.Compound();
+        // const sphereShape = new CANNON.Sphere(sphereRadius);
+        // // Top sphere
+        // this.player.shape.addShape(sphereShape, new CANNON.Vec3(0, cylinderHeight / 2, 0));
+        // // Bottom sphere
+        // this.player.shape.addShape(sphereShape, new CANNON.Vec3(0, -cylinderHeight / 2, 0));
+        // // Optional middle part (Box or Cylinder if available) - Box is simpler
+        // const boxShape = new CANNON.Box(new CANNON.Vec3(sphereRadius, cylinderHeight / 2, sphereRadius));
+        // this.player.shape.addShape(boxShape, new CANNON.Vec3(0, 0, 0));
+
 
         this.player.body = new CANNON.Body({
-            mass: 75,
+            mass: 70, // Player mass
             position: new CANNON.Vec3(0, 5, 5), // Start higher to avoid initial ground intersection issues
             material: this.materials.player,
             shape: this.player.shape,
-            linearDamping: 0.6, // Increase linear damping for less sliding
-            angularDamping: 0.95, // Strong angular damping to prevent spinning
-            // fixedRotation: false, // Allow rotation (esp. Yaw) - handled via quaternion updates
-            // allowSleep: false // Keep player awake for responsiveness
+            linearDamping: 0.6, // Dampens sliding motion, helps control
+            angularDamping: 1.0, // VERY strong angular damping - prevents ALL rotation from physics
+            fixedRotation: false, // We control rotation manually via quaternion updates
+            allowSleep: false // Keep player awake for responsiveness
         });
 
-        // Prevent tumbling: Allow rotation only around the Y-axis effectively.
-        // Best way is often applying corrective torque or directly setting angular velocity to zero on X/Z,
-        // or using constraints. For simplicity, strong angular damping helps a lot.
-        // An alternative: Set inertia tensor to prioritize Y rotation (advanced).
+        // Prevent tumbling by setting inertia tensor to infinity for X and Z axes
+        // This ensures physics engine won't easily rotate the body around these axes.
+        // this.player.body.invInertia.set(0, this.player.body.invInertia.y, 0, 0,0,0); // Does invInertia work like this? Check Cannon docs.
+        // Alternative: The high angular damping achieves a similar effect.
 
 
         this.world.addBody(this.player.body);
 
-        // Player Visual Mesh (e.g., a simple capsule or cylinder for debugging)
-        // IMPORTANT: This mesh is what the camera will be attached to.
-        const playerGeometry = new THREE.CapsuleGeometry(this.player.radius, this.player.height - this.player.radius * 2, 8, 16);
+        // Player Visual Mesh (A simple capsule for visual representation)
+        // This mesh is what the camera will be attached to.
+        // Geometry height should match physics body height.
+        const playerGeometry = new THREE.CapsuleGeometry(
+            this.player.radius, // Capsule radius
+            this.player.height - (2 * this.player.radius), // Height of the cylindrical part
+            4, 8 // Segments (low poly)
+        );
         const playerMaterial = new THREE.MeshStandardMaterial({
              color: 0xeeeeee,
              roughness: 0.8,
              visible: false // Make player model invisible from first-person view
+             // wireframe: true // Use wireframe for debugging visibility
         });
         this.player.mesh = new THREE.Mesh(playerGeometry, playerMaterial);
         this.player.mesh.castShadow = true; // Player can cast shadows
+        this.player.mesh.name = "PlayerMesh";
         // Initial position sync (important before camera attachment)
         this.player.mesh.position.copy(this.player.body.position);
         this.player.mesh.quaternion.copy(this.player.body.quaternion);
@@ -847,25 +1028,45 @@ const Physics = {
         Graphics.addObject(this.player.mesh); // Add mesh to the graphics scene
 
         // Link body and mesh via userData
-         this.player.body.userData = { mesh: this.player.mesh, isPlayer: true };
+         this.player.body.userData = { mesh: this.player.mesh, isPlayer: true, type: 'player' };
          this.player.mesh.userData = { body: this.player.body };
 
         console.log("Player physics body and mesh created.");
 
-        // Add collision event listener (example)
+        // Add collision event listener for ground detection
        this.player.body.addEventListener("collide", (event) => {
            const otherBody = event.body;
            const contact = event.contact;
-           const impactVelocity = contact.getImpactVelocityAlongNormal();
 
-            if (otherBody.material === this.materials.ground) {
-                if (impactVelocity > 1.5) { // Threshold for footstep sound
-                    // AudioManager.playSound('footstep', contact.rj, 0.4); // Play at contact point
+           // Check if colliding with the ground (or any static body below)
+           // A more robust check involves the contact normal
+            let isGroundContact = false;
+            if (otherBody.userData?.isGround || otherBody.mass === 0) { // Check userData or if static
+                // Check contact normal - should point mostly upwards relative to player
+                const contactNormal = contact.ni; // Normal on the player body
+                // Player's up vector (local Y) in world space
+                const upAxis = new CANNON.Vec3(0, 1, 0);
+                this.player.body.quaternion.vmult(upAxis, upAxis); // Rotate local up to world space
+
+                // Check angle between contact normal and player's up vector
+                // Dot product > 0.5 means angle is less than 60 degrees from vertical
+                if (contactNormal.dot(upAxis) > 0.5) {
+                     isGroundContact = true;
                 }
+            }
+
+
+            if (isGroundContact) {
+                this.player.isOnGround = true;
+                this.player.lastGroundContactTime = this.world.time;
+                 // Play footstep sound on impact (optional)
+                 // const impactVelocity = contact.getImpactVelocityAlongNormal();
+                 // if (impactVelocity > 1.0) {
+                 //     AudioManager.playSound('footstep', contact.rj, 0.4);
+                 // }
             } else if (otherBody.userData?.targetData) { // Check for targetData in userData
                  // Player collided with a target
                  // console.log("Player bumped target:", otherBody.userData.targetData.id);
-                 // Maybe apply small force to target?
             }
        });
     },
@@ -877,114 +1078,146 @@ const Physics = {
         // Apply forces/torques based on InputManager state
         this.applyPlayerMovementAndRotation(deltaTime);
 
+        // Check if player is still on ground (add a small buffer time)
+        if (this.player.isOnGround && (this.world.time - this.player.lastGroundContactTime > 0.1)) {
+             this.player.isOnGround = false;
+             // console.log("Player left ground");
+        }
+
+
         // Step the physics world
-        const fixedTimeStep = 1 / 60;
-        const maxSubSteps = 5; // Allow more substeps if needed for stability
-        this.world.step(fixedTimeStep, deltaTime, maxSubSteps);
+        // Use a fixed time step loop for stability
+        this.world.step(this.fixedTimeStep, deltaTime, this.maxSubSteps);
 
         // Synchronize visual meshes with physics bodies
         this.syncMeshes();
     },
 
     applyPlayerMovementAndRotation(deltaTime) {
-        if (!this.player.body || (!Game.gameStarted || Game.isPaused || Game.isSettingsOpen)) {
-             // If paused or settings open, explicitly stop movement by zeroing velocity?
-             if(this.player.body) {
-                // this.player.body.velocity.x *= 0.1; // Heavy damping when inactive
-                // this.player.body.velocity.z *= 0.1;
-                // this.player.body.angularVelocity.y *= 0.1;
-             }
+         if (!this.player.body || !this.player.mesh || !Game.gameStarted || Game.isPaused || Game.isSettingsOpen) {
+            // If inactive, strongly dampen velocities to prevent drifting
+            if(this.player.body) {
+                this.player.body.velocity.x *= 0.1;
+                this.player.body.velocity.z *= 0.1;
+                // Keep vertical velocity for gravity
+                this.player.body.angularVelocity.y *= 0.1; // Only dampen yaw slightly if needed
+            }
             return;
         }
 
         // --- Movement ---
-        const moveSpeed = 6.0; // Base movement speed
-        const maxSpeed = 7.0; // Max horizontal speed
-        const acceleration = 40.0; // How quickly player reaches moveSpeed (force multiplier)
+        const moveSpeed = 5.5; // Base movement speed (slightly reduced)
+        const maxSpeed = 6.0; // Max horizontal speed
+        const accelerationForce = 800.0; // Force applied for acceleration (adjust based on mass)
+        const brakingForceFactor = 0.3; // How strongly to brake when no input (fraction of accel force)
+
         const inputVector = InputManager.getMovementVector(); // {x, z} normalized direction
 
-        // Get player's current forward and right directions from the physics body's quaternion
+        // Get player's current forward and right directions from the *physics body's* quaternion
         const forwardDir = new CANNON.Vec3(0, 0, -1);
         const rightDir = new CANNON.Vec3(1, 0, 0);
         this.player.body.quaternion.vmult(forwardDir, forwardDir); // Rotate Vec3 by Quaternion
         this.player.body.quaternion.vmult(rightDir, rightDir);
-        forwardDir.y = 0; // Project onto XZ plane
-        rightDir.y = 0;
-        forwardDir.normalize();
-        rightDir.normalize();
+        // No need to project to XZ plane, use the body's orientation directly
 
-        // Calculate desired velocity based on input
-        const desiredVel = new CANNON.Vec3(0, 0, 0);
-        desiredVel.vadd(rightDir.scale(inputVector.x), desiredVel);
-        desiredVel.vadd(forwardDir.scale(inputVector.z), desiredVel);
-        desiredVel.normalize(); // Ensure input direction is normalized
-        desiredVel.scale(moveSpeed, desiredVel); // Scale to target speed
+        // Calculate desired world-space movement direction based on input
+        const desiredMoveDir = new CANNON.Vec3(0, 0, 0);
+        desiredMoveDir.vadd(rightDir.scale(inputVector.x), desiredMoveDir);
+        desiredMoveDir.vadd(forwardDir.scale(inputVector.z), desiredMoveDir);
+        desiredMoveDir.y = 0; // Ensure movement is horizontal
+        desiredMoveDir.normalize(); // Normalize the final direction vector
 
-        // Calculate velocity change needed
+        // Calculate force to apply
+        let force = new CANNON.Vec3(0,0,0);
         const currentVelXZ = new CANNON.Vec3(this.player.body.velocity.x, 0, this.player.body.velocity.z);
-        const velocityChange = new CANNON.Vec3();
-        desiredVel.vsub(currentVelXZ, velocityChange);
+        const currentSpeed = currentVelXZ.length();
 
-        // Calculate force to apply (F = m * a, but here a is related to velocityChange/time)
-        // Simple approach: Apply force proportional to velocity change needed
-        const force = new CANNON.Vec3(
-            velocityChange.x * acceleration,
-            0, // No vertical force from movement input
-            velocityChange.z * acceleration
-        );
+        if (inputVector.x !== 0 || inputVector.z !== 0) {
+             // Apply force in the desired direction
+             force = desiredMoveDir.scale(accelerationForce);
 
-        // Apply the calculated force
-        this.player.body.applyForce(force, this.player.body.position);
+             // Optional: Limit force if already moving fast in the desired direction
+             // This prevents exceeding max speed too easily due to continuous force application.
+             // const projVel = currentVelXZ.dot(desiredMoveDir);
+             // if (projVel > moveSpeed * 0.8) { // If moving fast in target dir
+             //     force = force.scale(0.5); // Reduce force
+             // }
 
-        // Clamp horizontal speed
-        const currentSpeedSq = this.player.body.velocity.x ** 2 + this.player.body.velocity.z ** 2;
-        if (currentSpeedSq > maxSpeed ** 2) {
-            const factor = maxSpeed / Math.sqrt(currentSpeedSq);
+        } else {
+             // No input: Apply braking force opposite to current velocity
+             if (currentSpeed > 0.1) { // Only brake if moving significantly
+                 const brakeDir = currentVelXZ.scale(-1);
+                 brakeDir.normalize();
+                 force = brakeDir.scale(accelerationForce * brakingForceFactor);
+             }
+        }
+
+        // Apply the calculated force (only horizontally)
+         const forcePoint = this.player.body.position; // Apply force at center of mass
+         this.player.body.applyForce(new CANNON.Vec3(force.x, 0, force.z), forcePoint);
+
+        // Clamp horizontal speed AFTER applying force and stepping the world (better handled by damping + forces)
+        // If direct speed clamping is needed, do it here:
+        const postStepVelXZ = new CANNON.Vec3(this.player.body.velocity.x, 0, this.player.body.velocity.z);
+        const postStepSpeed = postStepVelXZ.length();
+        if (postStepSpeed > maxSpeed) {
+            const factor = maxSpeed / postStepSpeed;
             this.player.body.velocity.x *= factor;
             this.player.body.velocity.z *= factor;
+            // console.log("Speed clamped");
         }
 
 
         // --- Rotation (Yaw) ---
-        // Apply torque or directly manipulate quaternion to match InputManager.targetYaw
+        // Directly set the player body's quaternion to match the desired yaw from InputManager
         const targetYaw = InputManager.targetYaw;
         const currentQuaternion = this.player.body.quaternion;
         const targetQuaternion = new CANNON.Quaternion();
         targetQuaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), targetYaw);
 
         // Smoothly interpolate the physics body's quaternion towards the target
-        const lerpFactor = 0.2; // Smoothing factor for rotation (adjust as needed)
-        currentQuaternion.slerp(targetQuaternion, lerpFactor, this.player.body.quaternion);
-        // Ensure the body wakes up if it was sleeping
-        // this.player.body.wakeUp(); // Usually needed if allowSleep=true
+        const slerpFactor = 0.25; // Smoothing factor for rotation (adjust as needed)
+        currentQuaternion.slerp(targetQuaternion, slerpFactor, this.player.body.quaternion);
 
-        // Alternative: Apply torque to rotate (more physics-based, harder to tune)
-        // const angleDiff = targetYaw - currentYawAngle; // Need to get currentYawAngle from quaternion
-        // const torqueMagnitude = angleDiff * rotationSpeedFactor;
-        // this.player.body.torque.y = torqueMagnitude; // Apply torque around Y
+        // Important: Ensure angular velocity around X and Z is zeroed due to direct quaternion manipulation
+        // and high angular damping. The slerp handles Y rotation smoothly.
+        this.player.body.angularVelocity.x = 0;
+        this.player.body.angularVelocity.z = 0;
+        // Allow Y angular velocity if using torque-based rotation, but zero it out if using slerp.
+        // Slerp approach is generally easier for FPS controllers.
+         // this.player.body.angularVelocity.y *= 0.1; // Dampen Y angular velocity if needed
+
+        // Ensure the body wakes up if it was sleeping (shouldn't sleep if allowSleep=false)
+        this.player.body.wakeUp();
     },
 
 
     syncMeshes() {
+         if (typeof THREE === 'undefined') return; // Skip if THREE not loaded
+
         // Sync player mesh
         if (this.player.body && this.player.mesh) {
             this.player.mesh.position.copy(this.player.body.position);
             this.player.mesh.quaternion.copy(this.player.body.quaternion);
         }
 
-        // Sync active targets
-        TargetManager.targets.forEach(targetData => {
-            if (targetData.mesh && targetData.body) {
-                // Only sync if the body is not sleeping (or sync always if needed)
-                // if (!targetData.body.sleepState === CANNON.Body.SLEEPING) {
-                     targetData.mesh.position.copy(targetData.body.position);
-                     targetData.mesh.quaternion.copy(targetData.body.quaternion);
-                // }
+        // Sync active targets (Iterate through Cannon world bodies is safer than TargetManager array if removals happen)
+        this.world.bodies.forEach(body => {
+            if (body.userData?.mesh && body.userData?.targetData) { // Check if it's a target body with a mesh
+                const mesh = body.userData.mesh;
+                // Only sync if the body is not sleeping (performance optimization)
+                if (body.sleepState !== CANNON.Body.SLEEPING) {
+                     mesh.position.copy(body.position);
+                     mesh.quaternion.copy(body.quaternion);
+                }
 
-                // Check if target has fallen out of bounds
-                if (targetData.body.position.y < -15) { // Lower threshold
-                    // console.log(`Target ${targetData.id} fell out of bounds.`);
-                    TargetManager.removeTarget(targetData, true); // Mark as out of bounds
+                // Check if target has fallen out of bounds or is way too far
+                if (body.position.y < -20 || body.position.length() > 500) {
+                     // console.log(`Target ${body.userData.targetData.id} out of bounds or too far.`);
+                     if (typeof TargetManager !== 'undefined' && TargetManager.removeTarget) {
+                         // Use timeout to avoid modifying array/world during iteration/step
+                         setTimeout(() => TargetManager.removeTarget(body.userData.targetData, true), 0);
+                     }
                 }
             }
         });
@@ -993,7 +1226,9 @@ const Physics = {
 
     // --- Raycasting for Shooting ---
     raycast(originVec3, directionVec3, distance) {
-         // Convert THREE vectors (if passed) to CANNON vectors
+         if (!this.world || typeof CANNON === 'undefined') return [];
+
+         // Convert THREE vectors to CANNON vectors
          const origin = new CANNON.Vec3(originVec3.x, originVec3.y, originVec3.z);
          const direction = new CANNON.Vec3(directionVec3.x, directionVec3.y, directionVec3.z);
 
@@ -1002,41 +1237,88 @@ const Physics = {
         direction.normalize(); // Ensure direction is normalized
         to.vadd(direction.scale(distance), to); // Add scaled direction vector
 
+         // Use RaycastClosest for efficiency if only the first hit matters often
+         // const ray = new CANNON.Ray(origin, to);
+         // const options = {
+         //     collisionFilterMask: -1, // Collide with everything
+         //     skipBackfaces: true,
+         //     checkCollisionResponse: true
+         // };
+         // const result = new CANNON.RaycastResult();
+         // ray.intersectWorld(this.world, options, result); // Fills 'result'
+         // if(result.hasHit && result.body !== this.player.body) {
+         //     return [{ // Return array format consistent with intersectWorld
+         //          body: result.body,
+         //          point: result.hitPointWorld.clone(),
+         //          distance: result.distance,
+         //          normal: result.hitNormalWorld.clone()
+         //       }];
+         // } else {
+         //     return []; // No hit or hit player
+         // }
+
+
+         // Use intersectWorld if penetration/multiple hits are needed
          const ray = new CANNON.Ray(origin, to);
          const options = {
              collisionFilterMask: -1, // Collide with everything by default
              skipBackfaces: true,     // Don't detect hits from inside
-             checkCollisionResponse: true // Respect collision response settings
+             checkCollisionResponse: true, // Respect collision response settings
+             mode: CANNON.Ray.CLOSEST // Start with closest, can change to ALL if needed
+             // mode: CANNON.Ray.ANY // Fastest if you just need to know *if* something was hit
          };
-         const result = new CANNON.RaycastResult();
+         const result = new CANNON.RaycastResult(); // Reusable result object
          const hits = [];
 
-         ray.intersectWorld(this.world, options, function(result){
-              // Check if the hit body is the player itself, ignore if so
-             if(result.body === Physics.player.body) {
-                  // console.log("Raycast hit player body, ignoring.");
-                  return; // Continue ray through player
-              }
+         // intersectWorld with a callback allows processing multiple hits if mode=ALL
+         // With mode=CLOSEST, it behaves like intersectBody but checks the whole world.
+         const hasHit = ray.intersectWorld(this.world, options, result);
+
+          if(hasHit && result.body !== this.player.body) {
                hits.push({
                   body: result.body,
                   point: result.hitPointWorld.clone(), // Clone vectors!
                   distance: result.distance,
                   normal: result.hitNormalWorld.clone() // Get hit normal too
                });
-           });
+           }
 
-           // Sort hits by distance (closest first)
+
+           // If using mode = CANNON.Ray.ALL:
+           /*
+           ray.result = new CANNON.RaycastResult(); // Reset result for ALL mode
+           options.mode = CANNON.Ray.ALL;
+           options.result = []; // Provide array to store results
+           ray.intersectWorld(this.world, options);
+           options.result.forEach(hitResult => {
+               if (hitResult.body !== this.player.body) {
+                    hits.push({
+                        body: hitResult.body,
+                        point: hitResult.hitPointWorld.clone(),
+                        distance: hitResult.distance,
+                        normal: hitResult.hitNormalWorld.clone()
+                    });
+               }
+           });
+           // Sort hits by distance (closest first) if using ALL mode
            hits.sort((a, b) => a.distance - b.distance);
-          return hits; // Return array of sorted hits: [{body, point, distance, normal}, ...]
+           */
+
+          return hits; // Return array of hits (usually just one with CLOSEST mode)
       },
 
 
     addBody(body, mesh = null, linkUserData = true) {
-        if (!body) return;
+        if (!body || !(body instanceof CANNON.Body)) {
+             console.warn("Attempted to add invalid body to physics world:", body);
+             return;
+        }
+        if (!this.world) return;
+
         this.world.addBody(body);
 
          // Link mesh and body via userData if requested and mesh exists
-         if (linkUserData && mesh) {
+         if (linkUserData && mesh && typeof THREE !== 'undefined' && mesh instanceof THREE.Object3D) {
             body.userData = body.userData || {}; // Ensure userData exists
              body.userData.mesh = mesh;
              mesh.userData = mesh.userData || {};
@@ -1045,15 +1327,21 @@ const Physics = {
     },
 
     removeBody(body) {
-        if (!body) return;
+        if (!body || !(body instanceof CANNON.Body)) return;
+        if (!this.world) return;
+
 
         // Remove any event listeners attached *directly* to the body
-        // body.removeEventListener("collide", ...); // Needs reference to the specific listener function
+         // This requires storing references to listeners, which is complex.
+         // Often easier to let JS garbage collection handle listeners if the body is removed.
+         // body.removeEventListener("collide", ...);
 
         // Remove the graphical mesh if linked via userData
         if (body.userData?.mesh) {
             const mesh = body.userData.mesh;
-             Graphics.removeObject(mesh); // Use Graphics module to remove and dispose
+            if (typeof Graphics !== 'undefined' && Graphics.removeObject) {
+                 Graphics.removeObject(mesh); // Use Graphics module to remove and dispose
+            }
              if (mesh.userData) {
                 mesh.userData.body = null; // Break link from mesh back to body
             }
@@ -1062,6 +1350,7 @@ const Physics = {
 
         // Remove body from the physics world
         this.world.removeBody(body);
+        // console.log("Removed physics body.");
     }
 };
 
@@ -1073,7 +1362,7 @@ const InputManager = {
     mouse: {
         dx: 0, dy: 0, // Delta movement this frame
         leftButton: false,
-        // rightButton: false
+        // rightButton: false // Uncomment if needed
     },
     touch: {
         moveIdentifier: null, // ID of touch controlling movement joystick
@@ -1088,16 +1377,17 @@ const InputManager = {
         lookCurrentX: 0, lookCurrentY: 0,
         lookDeltaX: 0, lookDeltaY: 0, // Delta for look rotation calculation this frame
 
-        sensitivity: 1.0,
+        sensitivity: 1.0, // This is the setting multiplier
         moveActive: false,
         lookActive: false,
+        shootActive: false, // Track if shoot button is pressed
     },
     pointerLocked: false,
     targetYaw: 0,    // Target camera yaw (horizontal) angle (radians) - Physics body aims for this
     targetPitch: 0, // Target camera pitch (vertical) angle (radians) - Visual only
 
-    lookSensitivity: 0.0022, // Desktop sensitivity
-    mobileLookSensitivityMultiplier: 0.6, // Adjust mobile sensitivity relative to desktop
+    lookSensitivity: 0.0022, // Base Desktop sensitivity
+    mobileLookSensitivityMultiplier: 0.7, // Adjust mobile sensitivity relative to desktop (increased slightly)
 
     // Key Bindings (loaded from GameSettings)
     keyBindings: {
@@ -1106,10 +1396,16 @@ const InputManager = {
         left: 'KeyA',
         right: 'KeyD',
         reload: 'KeyR',
-        // jump: 'Space'
+        // jump: 'Space',
+        // pause: 'Escape' // Handled separately in Game module usually
     },
 
     init() {
+         // Ensure required modules/elements are available
+         if (typeof GameSettings === 'undefined' || typeof Graphics === 'undefined' || !Graphics.renderer?.domElement) {
+             console.error("InputManager init failed: Missing dependencies (GameSettings, Graphics, or renderer).");
+             return false;
+         }
         this.updateKeyBindings(); // Load initially from GameSettings
         this.addEventListeners();
         this.resetState();
@@ -1124,23 +1420,29 @@ const InputManager = {
              moveIdentifier: null, lookIdentifier: null, shootIdentifier: null,
              moveStartX: 0, moveStartY: 0, moveCurrentX: 0, moveCurrentY: 0, moveDeltaX: 0, moveDeltaY: 0,
              lookStartX: 0, lookStartY: 0, lookCurrentX: 0, lookCurrentY: 0, lookDeltaX: 0, lookDeltaY: 0,
-             sensitivity: this.touch.sensitivity, // Keep loaded sensitivity
-             moveActive: false, lookActive: false
+             // Keep sensitivity loaded from settings
+             sensitivity: this.touch.sensitivity || GameSettings.settings.touchSensitivity || 1.0,
+             moveActive: false, lookActive: false, shootActive: false
          };
-        this.targetYaw = 0;
-        this.targetPitch = 0;
-        // Pointer lock state is handled by events, not reset here
+         // Reset look angles to face forward initially?
+         this.targetYaw = 0; // Or read initial player body yaw?
+         this.targetPitch = 0;
+         // Pointer lock state is handled by events, not reset here unless forced
+         // if(document.pointerLockElement) document.exitPointerLock();
+         this.pointerLocked = !!document.pointerLockElement; // Update state based on current lock
     },
 
     updateKeyBindings() {
+         if (typeof GameSettings === 'undefined') return;
         this.keyBindings.forward = GameSettings.settings.forwardKey;
         this.keyBindings.backward = GameSettings.settings.backwardKey;
         this.keyBindings.left = GameSettings.settings.leftKey;
         this.keyBindings.right = GameSettings.settings.rightKey;
         // Add other keys if implemented (reload, jump)
-         // this.keyBindings.reload = GameSettings.settings.reloadKey;
+         this.keyBindings.reload = GameSettings.settings.reloadKey || 'KeyR'; // Add default fallback
         console.log("Key bindings updated:", this.keyBindings);
-        this.keys = {}; // Reset internal key state when bindings change
+        // Reset internal key state ONLY if bindings actually changed? Or always? Reset always is safer.
+         this.keys = {};
     },
 
     setTouchSensitivity(sensitivity) {
@@ -1155,75 +1457,97 @@ const InputManager = {
 
         // Pointer Lock (Desktop)
         document.addEventListener('pointerlockchange', this.handlePointerLockChange.bind(this), false);
-        document.addEventListener('mozpointerlockchange', this.handlePointerLockChange.bind(this), false); // Firefox
+        // No need for moz prefix anymore generally
+
         // Click on canvas to request pointer lock
-        Graphics.renderer.domElement.addEventListener('click', () => {
+        const canvas = Graphics.renderer.domElement;
+        canvas.addEventListener('click', () => {
+             // Only request lock if game is running, not paused/settings, and not already locked
             if (!isMobile && !this.pointerLocked && Game.gameStarted && !Game.isPaused && !Game.isSettingsOpen) {
-                Graphics.renderer.domElement.requestPointerLock()
-                    .catch(err => console.error("Failed to request pointer lock:", err));
+                 canvas.requestPointerLock({
+                     unadjustedMovement: true // Use raw mouse movement if available
+                 }).catch(err => console.warn("Failed to request pointer lock:", err)); // Warn instead of error
             }
         });
 
         // Mouse Movement (Only when locked)
         window.addEventListener('mousemove', this.handleMouseMove.bind(this));
 
-        // Pointer Down/Up for Shooting (Handles Mouse and Generic Touch)
-        // Attach to canvas for game world interactions
-        Graphics.renderer.domElement.addEventListener('pointerdown', this.handlePointerDown.bind(this));
-        Graphics.renderer.domElement.addEventListener('pointerup', this.handlePointerUp.bind(this));
+        // Pointer Down/Up for Shooting (Handles Mouse and Generic Touch outside UI buttons)
+        canvas.addEventListener('pointerdown', this.handlePointerDown.bind(this));
+        // Listen on window for pointer up to catch release even if cursor moved off canvas
+        window.addEventListener('pointerup', this.handlePointerUp.bind(this));
         // Prevent context menu on right click over canvas
-         Graphics.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 
         // Specific Touch Events for Mobile UI (Joystick, Buttons)
         if (isMobile) {
             this.addMobileTouchListeners();
         }
+
+        // Handle browser visibility change (pause game if tab hidden)
+        document.addEventListener("visibilitychange", () => {
+             if (document.visibilityState === 'hidden' && Game.gameStarted && !Game.isPaused) {
+                 console.log("Tab hidden, pausing game.");
+                 Game.pauseGame(true); // Force pause
+             }
+         });
     },
 
     // --- Keyboard Handling ---
     handleKeyDown(e) {
-        // Ignore input if settings menu is open and the target is not a keybind input
-        if (Game.isSettingsOpen && !e.target.classList.contains('keybind-input')) return;
-         // Ignore repeats to only capture initial press for some actions
-         // if (e.repeat) return;
+        // Ignore input if focused on an input/textarea/select, unless it's a keybind input
+        const targetTagName = e.target.tagName.toLowerCase();
+        if ( (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') &&
+             !e.target.classList.contains('keybind-input') ) {
+                return;
+            }
+
+        // Ignore input if settings menu is open (unless it's ESC or keybind input)
+        if (Game.isSettingsOpen && e.key !== 'Escape' && !e.target.classList.contains('keybind-input')) return;
+
+        // Prevent default browser actions for game keys (like spacebar scrolling)
+         if (Object.values(this.keyBindings).includes(e.code) || e.code === 'Space') {
+             e.preventDefault();
+         }
 
          this.keys[e.code] = true;
 
-         // Handle actions triggered on key down (if any, e.g., toggle something)
-         // Example: Pause toggle
-         if (e.code === 'Escape' && !Game.isSettingsOpen) {
-             // If pointer lock is active, Escape will release it first.
-             // The pointerlockchange event handles pausing in that case.
-             // If not locked, toggle pause directly.
-             if(!this.pointerLocked) {
-                Game.togglePause();
-             }
-         }
+         // Let Game module handle pause toggle on Escape press
+         // if (e.code === 'Escape' && !Game.isSettingsOpen) { ... } handled in Game.setupUIInteractions
     },
     handleKeyUp(e) {
-        if (Game.isSettingsOpen && !e.target.classList.contains('keybind-input')) return;
+         // Similar check for focused elements
+         const targetTagName = e.target.tagName.toLowerCase();
+         if ( (targetTagName === 'input' || targetTagName === 'textarea' || targetTagName === 'select') &&
+              !e.target.classList.contains('keybind-input') ) {
+                 return;
+         }
+        if (Game.isSettingsOpen && e.key !== 'Escape' && !e.target.classList.contains('keybind-input')) return;
+
         this.keys[e.code] = false;
     },
 
     // --- Pointer Lock Handling ---
     handlePointerLockChange() {
-        const lockElement = document.pointerLockElement || document.mozPointerLockElement;
+        const lockElement = document.pointerLockElement;
         if (lockElement === Graphics.renderer.domElement) {
             this.pointerLocked = true;
             console.log('Pointer Lock acquired');
             // Optional: Hide custom cursor if you have one
+             document.body.style.cursor = 'none';
         } else {
              if(this.pointerLocked) { // Only trigger if lock was previously held
                 this.pointerLocked = false;
                 console.log('Pointer Lock released');
-                // If game was running and lock is lost, pause the game
+                // Show cursor again
+                 document.body.style.cursor = 'default';
+                // If game was running and lock is lost (e.g. via ESC), pause the game
                  if (Game.gameStarted && !Game.isPaused && !Game.isSettingsOpen) {
                      console.log('Pointer lock lost during gameplay, pausing.');
                      Game.pauseGame(true); // Pass true to force pause state
-                      // Optional: Show pause menu UI
                  }
-                 // Optional: Show custom cursor
              }
         }
     },
@@ -1232,150 +1556,27 @@ const InputManager = {
     handleMouseMove(event) {
         // Only process if pointer is locked (desktop) and game is active
         if (!this.pointerLocked || !Game.gameStarted || Game.isPaused || Game.isSettingsOpen) {
-             this.mouse.dx = 0; this.mouse.dy = 0; // Reset delta if not active
+             // No need to reset dx/dy here, they are reset at end of Game.gameLoop
              return;
         }
 
-        // Get movement deltas
-        const movementX = event.movementX || event.mozMovementX || 0;
-        const movementY = event.movementY || event.mozMovementY || 0;
+        // Get movement deltas (use unadjusted if available)
+        const movementX = event.movementX || 0;
+        const movementY = event.movementY || 0;
 
-        this.mouse.dx = movementX;
-        this.mouse.dy = movementY;
+        this.mouse.dx += movementX; // Accumulate delta for the frame
+        this.mouse.dy += movementY;
 
         // Update target camera angles (sensitivity applied here)
-        this.targetYaw -= movementX * this.lookSensitivity;
-        this.targetPitch -= movementY * this.lookSensitivity;
-
-        // Normalize Yaw angle (keep between 0 and 2*PI or -PI and PI)
-        this.targetYaw = this.targetYaw % (Math.PI * 2);
-        // Clamp Pitch angle
-        this.targetPitch = clamp(this.targetPitch, -Math.PI / 2 + 0.1, Math.PI / 2 - 0.1);
-    },
-
-
-    // --- Mobile Touch Handling ---
-    addMobileTouchListeners() {
-        const joystickArea = document.getElementById('joystick');
-        const shootButton = document.getElementById('shootButton');
-        const canvas = Graphics.renderer.domElement; // Use canvas for look input
-
-        // --- Touch Start ---
-         document.body.addEventListener('touchstart', (e) => { // Listen on body to capture all touches initially
-            if (!Game.gameStarted || Game.isPaused || Game.isSettingsOpen) return;
-
-             // e.preventDefault(); // Prevent default actions like scrolling/zooming ONLY if touch is handled
-
-             const joystickRect = joystickArea?.getBoundingClientRect();
-             const shootButtonRect = shootButton?.getBoundingClientRect();
-
-             for (let i = 0; i < e.changedTouches.length; i++) {
-                const touch = e.changedTouches[i];
-                 const touchX = touch.clientX;
-                 const touchY = touch.clientY;
-
-                 // Check if touch is on Joystick
-                 if (joystickArea && this.touch.moveIdentifier === null &&
-                    touchX >= joystickRect.left && touchX <= joystickRect.right &&
-                    touchY >= joystickRect.top && touchY <= joystickRect.bottom)
-                {
-                     e.preventDefault();
-                     this.touch.moveIdentifier = touch.identifier;
-                     this.touch.moveStartX = touchX;
-                     this.touch.moveStartY = touchY;
-                     this.touch.moveCurrentX = touchX;
-                     this.touch.moveCurrentY = touchY;
-                     this.touch.moveActive = true;
-                     this.updateJoystickVisual(0, 0); // Center initially
-                     joystickArea.classList.add('active');
-                     // console.log("Joystick touch started:", touch.identifier);
-
-                 }
-                 // Check if touch is on Shoot Button
-                 else if (shootButton && this.touch.shootIdentifier === null &&
-                    touchX >= shootButtonRect.left && touchX <= shootButtonRect.right &&
-                    touchY >= shootButtonRect.top && touchY <= shootButtonRect.bottom)
-                 {
-                      e.preventDefault();
-                      this.touch.shootIdentifier = touch.identifier;
-                      this.mouse.leftButton = true; // Simulate left mouse down
-                      Game.triggerShoot(); // Trigger immediately on press
-                      shootButton.classList.add('active');
-                      // console.log("Shoot button touch started:", touch.identifier);
-                 }
-                 // Check if touch is for Looking (right side of screen, not on buttons)
-                 else if (this.touch.lookIdentifier === null && touchX > window.innerWidth / 2) {
-                     // Avoid starting look if touch also started on shoot button
-                      let onShootButton = shootButton &&
-                                         touchX >= shootButtonRect.left && touchX <= shootButtonRect.right &&
-                                         touchY >= shootButtonRect.top && touchY <= shootButtonRect.bottom;
-                     if(!onShootButton) {
-                         e.preventDefault();
-                         this.touch.lookIdentifier = touch.identifier;
-                         this.touch.lookStartX = touchX;
-                         this.touch.lookStartY = touchY;
-                         this.touch.lookCurrentX = touchX;
-                         this.touch.lookCurrentY = touchY;
-                         this.touch.lookActive = true;
-                         this.touch.lookDeltaX = 0; // Reset delta for the frame
-                         this.touch.lookDeltaY = 0;
-                         // console.log("Look touch started:", touch.identifier);
-                     }
-                 }
-             }
-         }, { passive: false }); // Need passive: false to call preventDefault
-
-
-        // --- Touch Move ---
-         document.body.addEventListener('touchmove', (e) => {
-             if (!Game.gameStarted || Game.isPaused || Game.isSettingsOpen) return;
-
-              // Prevent default only if a relevant touch is moved
-             let prevent = false;
-             for (let i = 0; i < e.changedTouches.length; i++) {
-                 const touch = e.changedTouches[i];
-                  if (touch.identifier === this.touch.moveIdentifier || touch.identifier === this.touch.lookIdentifier) {
-                     prevent = true;
-                     break;
-                  }
-             }
-             if (prevent) e.preventDefault();
-
-
-             for (let i = 0; i < e.changedTouches.length; i++) {
-                 const touch = e.changedTouches[i];
-                 const touchX = touch.clientX;
-                 const touchY = touch.clientY;
-
-                  // Handle Movement Joystick Drag
-                  if (touch.identifier === this.touch.moveIdentifier) {
-                      this.touch.moveCurrentX = touchX;
-                      this.touch.moveCurrentY = touchY;
-                      // Calculate delta from the initial touch start for visual feedback
-                      const visualDeltaX = this.touch.moveCurrentX - this.touch.moveStartX;
-                      const visualDeltaY = this.touch.moveCurrentY - this.touch.moveStartY;
-                      this.updateJoystickVisual(visualDeltaX, visualDeltaY);
-                       // Store the raw delta from start for getMovementVector
-                       this.touch.moveDeltaX = visualDeltaX;
-                       this.touch.moveDeltaY = visualDeltaY;
-                  }
-                 // Handle Look Drag
-                  else if (touch.identifier === this.touch.lookIdentifier) {
-                     // Calculate delta since last move event for this finger
-                     const deltaX = touchX - this.touch.lookCurrentX;
-                     const deltaY = touchY - this.touch.lookCurrentY;
-
-                      this.touch.lookDeltaX = deltaX; // Store delta for this frame
-                      this.touch.lookDeltaY = deltaY;
-
-                      // Update target angles (apply sensitivity here)
-                      const effectiveSensitivity = this.lookSensitivity * this.mobileLookSensitivityMultiplier * this.touch.sensitivity;
-                      this.targetYaw -= deltaX * effectiveSensitivity;
-                      this.targetPitch -= deltaY * effectiveSensitivity;
-
-                      // Normalize Yaw and Clamp Pitch
+        // Use accumulated delta for smoother feeling over the frame
+        const effectiveSensitivity = this.lookSensitivity; // No multiplier for desktop
+        this.targetYaw -= this.mouse.dx * effectiveSensitivity;
+        this.targetPitch -= this.mouse.dy * effectiveSensitivity;
+   
+// Normalize Yaw and Clamp Pitch
                      this.targetYaw = this.targetYaw % (Math.PI * 2);
-                     this.targetPitch = clamp(this.targetPitch, -Math.PI / 2 + 0.1, Math.PI / 2 - 0.1);
+                     if(this.targetYaw < 0) this.targetYaw += Math.PI * 2; // Ensure positive angle
+                     this.targetPitch = clamp(this.targetPitch, -Math.PI / 2 + 0.05, Math.PI / 2 - 0.05); // Clamp pitch
 
                      // Update current position for next delta calculation
                      this.touch.lookCurrentX = touchX;
@@ -1406,13 +1607,14 @@ const InputManager = {
                  else if (touch.identifier === this.touch.lookIdentifier) {
                      this.touch.lookIdentifier = null;
                      this.touch.lookActive = false;
-                     this.touch.lookDeltaX = 0; // Reset delta
+                     this.touch.lookDeltaX = 0; // Reset accumulated delta
                      this.touch.lookDeltaY = 0;
                       // console.log("Look touch ended.");
                  }
                   // Shoot Button Touch Ended
                  else if (touch.identifier === this.touch.shootIdentifier) {
                      this.touch.shootIdentifier = null;
+                     this.touch.shootActive = false; // Button is no longer active
                      this.mouse.leftButton = false; // Simulate mouse up
                      shootButton?.classList.remove('active');
                      // console.log("Shoot button touch ended.");
@@ -1470,7 +1672,7 @@ const InputManager = {
         // Require pointer lock on desktop for shooting, but allow click to gain lock
         if (!isMobile && !this.pointerLocked) {
              if (Game.gameStarted && !Game.isPaused && !Game.isSettingsOpen) {
-                 // Request lock, but don't shoot yet
+                 // Request lock, but don't shoot yet - let click acquire lock first
                  // Graphics.renderer.domElement.requestPointerLock();
              }
              // console.log("Pointer down ignored (desktop, not locked)");
@@ -1502,6 +1704,11 @@ const InputManager = {
          // Check for left mouse button release or primary touch release
         if (event.button === 0) {
              this.mouse.leftButton = false;
+             if(this.touch.shootActive) { // Ensure shoot button is also released on touch end
+                const shootButton = document.getElementById('shootButton');
+                shootButton?.classList.remove('active');
+                this.touch.shootActive = false;
+             }
              // Handle stopping automatic fire here if implemented
          }
         // Right button release
@@ -1697,9 +1904,9 @@ const TargetManager = {
             material: Physics.materials.target,
             linearDamping: 0.05, // Low linear damping
             angularDamping: 0.1, // Low angular damping
-            // allowSleep: true, // Allow targets to sleep
-            // sleepSpeedLimit: 0.2,
-            // sleepTimeLimit: 0.8
+            allowSleep: true, // Allow targets to sleep
+            sleepSpeedLimit: 0.2,
+            sleepTimeLimit: 0.8
         });
         body.quaternion.copy(mesh.quaternion); // Match initial rotation
 
