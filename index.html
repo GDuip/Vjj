@@ -1,1 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPS Game</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        /* Inline Styles for Settings Button (Consistent with CSS, for HTML completeness) */
+        .settings-btn {
+          position: absolute;
+          top: 15px;
+          left: 15px;
+          padding: 8px 15px;
+          font-size: 1em;
+          background-color: rgba(0, 0, 0, 0.4);
+          color: white;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          transition: background-color 0.2s ease-out, opacity 0.2s ease-out;
+          z-index: 50;
+          opacity: 0.8;
+          text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+           touch-action: manipulation;
+        }
 
+        .settings-btn:hover {
+          background-color: rgba(0, 0, 0, 0.6);
+          opacity: 1;
+        }
+
+        .settings-btn.hidden {
+            opacity: 0;
+            pointer-events: none; /* Make it non-interactive when hidden */
+        }
+        .settings-btn.disabled {
+            opacity: 0.5;
+            pointer-events: none; /* Make it non-interactive when disabled */
+            cursor: default;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="gameUI" style="display: none;"> <!-- Initially Hidden -->
+        <div id="scoreDisplay">
+            <span id="scoreLabel" data-i18n="score">SCORE</span>: <span id="scoreValue">0</span>
+        </div>
+        <div id="timerDisplay">
+            <span id="timerLabel" data-i18n="time">TIME</span>: <span id="timerValue">60</span>
+        </div>
+        <div id="ammoDisplay">
+            <span id="ammoLabel" data-i18n="ammo">AMMO</span>:
+            <span id="ammoValue">15</span> / <span id="ammoMaxValue">15</span>
+            <span id="totalAmmoValue">(75)</span>
+        </div>
+        <div id="healthDisplay" class="health-bar">
+            <div id="healthFill" class="health-fill"></div>
+            <div id="healthValueDisplay"><span id="healthValue">100</span> HP</div>
+        </div>
+        <div id="comboDisplay">
+            <div id="combo" style="opacity: 0; transform: translateY(10px);">
+                <span id="comboValue">1.0x</span> <span id="comboHits"></span>
+            </div>
+        </div>
+        <div id="reloadIndicator" style="display: none;">
+            <div class="reload-fill"></div>
+        </div>
+        <div id="hitMarker" style="opacity: 0;">X</div>
+        <div id="crosshair">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2.5v19m-9.5-9.5h19"/>
+            </svg>
+        </div>
+        <div id="gunEffects">
+            <!-- Muzzle flash and other gun effects will be added here by JavaScript -->
+        </div>
+    </div>
+
+    <button class="settings-btn" id="settingsButton" onclick="toggleSettings()" ontouchstart="toggleSettings()" class="settings-btn">Settings</button>
+
+
+    <!-- Mobile Controls -->
+    <div id="mobileControls" style="display: none;">
+        <div id="joystick">
+            <div id="joystickKnob"></div>
+        </div>
+        <button id="shootButton">Shoot</button>
+    </div>
+
+
+    <!-- Start Screen UI -->
+    <div id="startScreen" class="ui-screen show"> <!-- Initially Visible -->
+        <h1>FPS Game</h1>
+        <p>Click to Start</p>
+        <button class="ui-button primary" id="startButton">Start Game</button>
+    </div>
+
+    <!-- Pause Screen UI -->
+    <div id="pauseScreen" class="ui-screen">
+        <h1>Game Paused</h1>
+        <p>Press ESC or Resume to Continue</p>
+        <button class="ui-button primary" id="resumeButton">Resume</button>
+        <button class="ui-button" id="quitButton">Quit to Menu</button>
+    </div>
+
+    <!-- Game Over Screen UI -->
+    <div id="gameOverScreen" class="ui-screen">
+        <h1>Game Over</h1>
+        <p id="finalScore">Your Score: <span id="finalScoreValue">0</span></p>
+        <p>Max Combo: <span id="maxComboValue">0</span></p>
+        <button class="ui-button primary" id="restartButton">Restart</button>
+    </div>
+
+    <!-- Settings Screen UI (Hidden by default) -->
+    <div id="settingsScreen" class="ui-screen">
+        <button id="closeSettingsButton">×</button>
+        <h2>Settings</h2>
+
+        <div class="settings-group">
+            <h3>Language</h3>
+            <div class="setting-row">
+                <label class="setting-label" for="languageSelect">Language:</label>
+                <div class="setting-control">
+                    <select id="languageSelect">
+                        <option value="en">English</option>
+                        <option value="ko">Korean</option>
+                        <!-- Add more languages -->
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <h3>Controls</h3>
+            <div class="setting-row">
+                <label class="setting-label" for="forwardKeyInput">Forward:</label>
+                <div class="setting-control">
+                    <input type="text" id="forwardKeyInput" class="keybind-input" value="KeyW" readonly>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label class="setting-label" for="backwardKeyInput">Backward:</label>
+                <div class="setting-control">
+                    <input type="text" id="backwardKeyInput" class="keybind-input" value="KeyS" readonly>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label class="setting-label" for="leftKeyInput">Left:</label>
+                <div class="setting-control">
+                    <input type="text" id="leftKeyInput" class="keybind-input" value="KeyA" readonly>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label class="setting-label" for="rightKeyInput">Right:</label>
+                <div class="setting-control">
+                    <input type="text" id="rightKeyInput" class="keybind-input" value="KeyD" readonly>
+                </div>
+            </div>
+             <div class="setting-row">
+                <label class="setting-label" for="touchSensitivity">Touch Sensitivity:</label>
+                <div class="setting-control">
+                    <input type="range" id="touchSensitivity" min="0.1" max="3.0" step="0.1" value="1.0">
+                    <span id="touchSensitivityValue" class="setting-value-display">1.0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <h3>Audio</h3>
+            <div class="setting-row">
+                <label class="setting-label" for="musicVolume">Music Volume:</label>
+                <div class="setting-control">
+                    <input type="range" id="musicVolume" min="0" max="1" step="0.01" value="0.5">
+                     <span id="musicVolumeValue" class="setting-value-display">50</span>%
+                </div>
+            </div>
+            <div class="setting-row">
+                <label class="setting-label" for="sfxVolume">SFX Volume:</label>
+                <div class="setting-control">
+                    <input type="range" id="sfxVolume" min="0" max="1" step="0.01" value="0.7">
+                     <span id="sfxVolumeValue" class="setting-value-display">70</span>%
+                </div>
+            </div>
+             <div class="setting-row">
+                <label class="setting-label" for="spatialReverb">Spatial Reverb:</label>
+                <div class="setting-control">
+                    <input type="checkbox" id="spatialReverb" checked>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label class="setting-label" for="reverbQuality">Reverb Quality:</label>
+                <div class="setting-control">
+                    <select id="reverbQuality">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add more settings groups as needed -->
+
+    </div>
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r158/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cannon-es@1.0.1/dist/cannon-es.js"></script>
+    <script src="script.js"></script> <!-- Link to your external Javascript file here -->
+
+
+</body>
+</html>
